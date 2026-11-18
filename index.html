@@ -1,0 +1,2098 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="CNC Slicer : du plan d’une pièce au Gcode de détourage, avec simulation 3D. From a part drawing to contour-cutting G-code, with 3D simulation.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect x=%272%27 y=%2717%27 width=%2728%27 height=%2711%27 rx=%272%27 fill=%27%23d8b685%27/%3E%3Cpath d=%27M8 17v5h16v-5%27 fill=%27none%27 stroke=%27%23d9581f%27 stroke-width=%272.2%27/%3E%3Crect x=%2713%27 y=%272%27 width=%276%27 height=%279%27 rx=%271.5%27 fill=%27%235a6876%27/%3E%3Crect x=%2715%27 y=%2711%27 width=%272%27 height=%279%27 fill=%27%231d5bc2%27/%3E%3C/svg%3E">
+</head>
+<body>
+<title>CNC Slicer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* CNC Slicer : réglages à gauche, contrôle (plan / simulation) et Gcode à droite. */
+:root {
+  --bg: #eef1f4; --panel: #ffffff; --ink: #15202b; --muted: #5a6876; --line: #d5dce4; --soft: #f5f7f9;
+  --accent: #1d5bc2; --accent-ink: #ffffff; --accent-soft: #e3ecfb;
+  --wood: #d8b685; --wood-dark: #b48c58; --cut: #d9581f; --rapid: #c2364a; --machine: #7446c9;
+  --good: #1f7a4a; --warn: #a86100; --bad: #b3261e; --grid: #cbd3dc;
+  --shadow: 0 1px 2px rgba(16, 24, 32, .06), 0 2px 8px rgba(16, 24, 32, .04);
+  --f-display: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1318; --panel: #151d26; --ink: #e5eaf0; --muted: #94a2b0; --line: #29343f; --soft: #1a242e;
+    --accent: #6b9ff0; --accent-ink: #0b1220; --accent-soft: #1d2c44;
+    --wood: #8f6d44; --wood-dark: #6d5032; --cut: #f08a55; --rapid: #f06a7d; --machine: #b597f5;
+    --good: #5ec28b; --warn: #f0a94a; --bad: #f2786f; --grid: #26313c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1318; --panel: #151d26; --ink: #e5eaf0; --muted: #94a2b0; --line: #29343f; --soft: #1a242e;
+  --accent: #6b9ff0; --accent-ink: #0b1220; --accent-soft: #1d2c44;
+  --wood: #8f6d44; --wood-dark: #6d5032; --cut: #f08a55; --rapid: #f06a7d; --machine: #b597f5;
+  --good: #5ec28b; --warn: #f0a94a; --bad: #f2786f; --grid: #26313c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 1440px; margin: 0 auto; padding-block: 16px 28px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 16px; }
+
+/* en-tête */
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 32px; height: 32px; flex: none; }
+.brand h1 { font: 800 24px/1 var(--f-display); letter-spacing: -0.01em; margin: 0; }
+.beta { font: 600 11px/1 var(--f-body); color: var(--accent); background: var(--accent-soft); border-radius: 99px; padding: 4px 8px; letter-spacing: .02em; }
+.tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: transparent; color: var(--muted); font: 600 12px var(--f-body); padding: 6px 10px; cursor: pointer; letter-spacing: .04em; min-height: 32px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.iconbtn { display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); cursor: pointer; text-decoration: none; }
+.iconbtn:hover { border-color: var(--accent); }
+.ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico.fill { fill: currentColor; stroke: none; }
+:root .i-sun { display: none; }
+:root[data-dark="1"] .i-sun { display: block; }
+:root[data-dark="1"] .i-moon { display: none; }
+
+/* mise en page */
+.layout { display: grid; grid-template-columns: minmax(300px, 410px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 920px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: grid; gap: 16px; min-width: 0; align-content: start; }
+.stack { display: grid; gap: 10px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; min-width: 0; box-shadow: var(--shadow); }
+.panel h2 { display: flex; align-items: center; gap: 8px; font: 700 13px/1.2 var(--f-display); text-transform: uppercase; letter-spacing: 0.07em; margin: 0; color: var(--ink); }
+.num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 700 12px var(--f-display); flex: none; }
+.headrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.tabs { display: flex; gap: 4px; background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); font: 600 13px var(--f-body); padding: 6px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; min-height: 32px; }
+.tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.14); }
+
+/* champs */
+label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+input[type="number"], input[type="text"], select, textarea { font: 13px var(--f-body); color: var(--ink); background: var(--soft); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; width: 100%; min-width: 0; min-height: 32px; }
+input[aria-invalid="true"] { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--soft)); }
+textarea { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.45; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible, .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); margin: 2px 0 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 420px) { .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.check { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); font-size: 13px; cursor: pointer; }
+.btn { display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--f-body); border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; min-height: 32px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--line); }
+.btn:disabled { opacity: .5; cursor: default; }
+.choice { display: grid; gap: 8px; }
+.choice > label { display: flex; gap: 8px; align-items: flex-start; color: var(--ink); font-size: 13px; cursor: pointer; }
+.choice small { display: block; color: var(--muted); font-size: 12px; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.hint code, .hint kbd, .help code { font-family: var(--f-mono); font-size: 11.5px; background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.sublabel { font-size: 12px; color: var(--muted); }
+details > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+
+/* sélecteur de fichier traduit, avec glisser-déposer */
+.drop { position: relative; display: flex; align-items: center; gap: 10px; border: 1.5px dashed var(--line); border-radius: 10px; padding: 10px 12px; background: var(--soft); color: var(--muted); cursor: pointer; font-size: 12.5px; }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop input[type="file"] { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.drop .btn { pointer-events: none; flex: none; }
+.drop .fname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop .fname.set { color: var(--ink); font-weight: 500; }
+
+/* résultats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.stat { background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; min-width: 0; }
+.stat b { display: block; font: 700 17px var(--f-display); font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.msgs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.msgs li { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.chip { font: 600 10.5px var(--f-body); text-transform: uppercase; letter-spacing: .06em; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.chip.error { color: var(--bad); } .chip.warn { color: var(--warn); } .chip.info { color: var(--accent); } .chip.ok { color: var(--good); }
+.viewer { position: relative; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); overflow: hidden; }
+#plan { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; max-height: 640px; touch-action: manipulation; }
+#plan.adding { cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 5px; }
+.cursorpos { position: absolute; right: 8px; bottom: 6px; font: 12px var(--f-mono); color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+#sim3d { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 620px; background: var(--soft); }
+#sim3d canvas { display: block; width: 100% !important; height: 100% !important; touch-action: none; }
+.simbar { display: grid; gap: 8px; }
+.simbar input[type="range"] { width: 100%; accent-color: var(--accent); }
+.dro { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 12.5px var(--f-mono); font-variant-numeric: tabular-nums; }
+.dro b { color: var(--muted); font-weight: 500; }
+.nosim { padding: 24px; color: var(--muted); }
+
+/* Gcode */
+.gcode { font: 12.5px/1.6 var(--f-mono); max-height: 540px; overflow: auto; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 6px 0; }
+.gcode div { padding: 0 10px; white-space: pre; cursor: pointer; border-left: 3px solid transparent; }
+.gcode div:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.gcode div.cur { background: color-mix(in srgb, var(--accent) 20%, transparent); border-left-color: var(--accent); }
+.gcode .ln { display: inline-block; width: 3.2em; color: var(--muted); opacity: .7; user-select: none; }
+.gcode .n { color: var(--muted); }
+.k-cm { color: var(--muted); font-style: italic; } .k-mc { color: var(--machine); } .k-g0 { color: var(--rapid); } .k-z { color: var(--cut); } .k-g1 { color: var(--ink); } .k-arc { color: var(--good); }
+.gkey { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.gkey li { display: flex; gap: 8px; align-items: baseline; }
+.gkey code { font: 600 11.5px var(--f-mono); min-width: 4.6em; }
+.gkey .cur { display: inline-block; min-width: 4.6em; height: 1em; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 20%, transparent); border-radius: 2px; }
+.badge { font: 600 11px var(--f-body); background: var(--soft); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+.safety { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; background: color-mix(in srgb, var(--warn) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line)); border-radius: 9px; padding: 8px 10px; margin: 0; }
+.safety .ico { color: var(--warn); margin-top: 2px; }
+
+/* calage d'image */
+#calCanvasWrap { overflow: auto; max-height: 360px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+#calCanvas { display: block; cursor: crosshair; max-width: none; }
+.calrow { display: grid; grid-template-columns: 24px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.calrow b { font: 700 13px var(--f-display); padding-bottom: 7px; }
+
+/* aide et pied de page */
+.help { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 20px; margin: 0; padding: 0; list-style: none; counter-reset: st; }
+.help li { counter-increment: st; display: grid; grid-template-columns: 26px 1fr; gap: 8px; font-size: 13px; }
+.help li::before { content: counter(st); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 700 12px var(--f-display); }
+.help b { display: block; margin-bottom: 2px; }
+footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="17" width="28" height="11" rx="2" fill="var(--wood)" stroke="var(--wood-dark)"/><path d="M8 17v5h16v-5" fill="none" stroke="var(--cut)" stroke-width="2.2"/><rect x="13" y="2" width="6" height="9" rx="1.5" fill="var(--muted)"/><rect x="15" y="11" width="2" height="9" fill="var(--accent)"/></svg>
+      <h1>CNC Slicer</h1>
+      <span class="beta" data-i18n="beta">bêta V0.1</span>
+    </div>
+    <div class="tools">
+      <a class="iconbtn" href="#help" id="helpLink" data-i18n-title="helpTitle" data-i18n-aria="helpTitle" title="Mode d'emploi" aria-label="Mode d'emploi"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.9"/><path d="M12 17.2h.01"/></svg></a>
+      <button class="iconbtn" type="button" id="themeBtn" data-i18n-title="themeTitle" data-i18n-aria="themeTitle" title="Thème clair / sombre" aria-label="Thème clair / sombre">
+        <svg class="ico i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        <svg class="ico i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <div class="seg" role="group" aria-label="Langue / Language">
+        <button type="button" id="langFr" lang="fr" aria-pressed="true">FR</button>
+        <button type="button" id="langEn" lang="en" aria-pressed="false">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Colonne réglages -->
+    <div class="col">
+      <section class="panel" aria-labelledby="h-src">
+        <h2 id="h-src"><span class="num">1</span><span data-i18n="hSrc">Plan de la pièce</span></h2>
+        <div class="tabs" role="tablist" data-i18n-aria="srcTabs" aria-label="Source du plan">
+          <button role="tab" id="tab-saisie" aria-selected="true" aria-controls="pane-saisie" data-i18n="tabInput">Saisie</button>
+          <button role="tab" id="tab-fichier" aria-selected="false" aria-controls="pane-fichier">DXF / SVG</button>
+          <button role="tab" id="tab-image" aria-selected="false" aria-controls="pane-image" data-i18n="tabImage">Image</button>
+        </div>
+
+        <div id="pane-saisie" role="tabpanel" aria-labelledby="tab-saisie" class="stack">
+          <div class="grid2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
+            <label for="exSel"><span data-i18n="examples">Exemples</span>
+              <select id="exSel">
+                <option value="p11" data-i18n="exP11">Pièce 11 : créneaux (lignes droites)</option>
+                <option value="plaque" data-i18n="exPlate">Plaque à congés : arcs, trous, lumière</option>
+              </select>
+            </label>
+            <button class="btn" id="btnSample" type="button" data-i18n="load">Charger</button>
+          </div>
+          <label for="pts"><span data-i18n="ptsLabel">Points du contour en mm, un par ligne : X Y</span>
+            <textarea id="pts" rows="13" spellcheck="false"></textarea>
+          </label>
+          <p class="hint" data-i18n-html="ptsHint">Ligne vide ou ligne <code>#</code> = nouveau contour ; un contour à l'intérieur d'un autre devient un trou. <code>@dx dy</code> = déplacement relatif. Virgule décimale acceptée. Vous pouvez aussi coller un Gcode existant.</p>
+          <label class="check"><input type="checkbox" id="clickAdd"><span data-i18n="clickAdd">Ajouter des points en cliquant sur le plan</span></label>
+          <div class="row">
+            <button class="btn" id="btnNewContour" type="button" data-i18n="newContour">Nouveau contour</button>
+            <button class="btn" id="btnUndo" type="button" data-i18n="undo">Retirer le dernier point</button>
+            <button class="btn ghost" id="btnClear" type="button" data-i18n="clear">Vider</button>
+          </div>
+        </div>
+
+        <div id="pane-fichier" role="tabpanel" aria-labelledby="tab-fichier" class="stack" hidden>
+          <span class="sublabel" data-i18n="vecLabel">Fichier DXF (Fusion 360 : clic droit sur l'esquisse → Enregistrer au format DXF) ou SVG</span>
+          <label class="drop" for="fileVec">
+            <span class="btn" data-i18n="chooseFile">Choisir un fichier</span>
+            <span class="fname" id="fileVecName" data-i18n="dropHint">ou glissez-le ici</span>
+            <input type="file" id="fileVec" accept=".dxf,.svg,image/svg+xml">
+          </label>
+          <div class="grid2">
+            <label for="vecUnit"><span data-i18n="dxfUnits">Unités DXF</span>
+              <select id="vecUnit">
+                <option value="0" data-i18n="fromFile">Lues dans le fichier</option>
+                <option value="1">mm</option>
+                <option value="10">cm</option>
+                <option value="25.4" data-i18n="inches">pouces</option>
+              </select>
+            </label>
+            <label for="svgScale"><span data-i18n="svgScale">SVG : mm par unité</span>
+              <input type="number" id="svgScale" step="any" min="0" placeholder="auto">
+            </label>
+          </div>
+          <p class="hint" id="vecInfo"></p>
+        </div>
+
+        <div id="pane-image" role="tabpanel" aria-labelledby="tab-image" class="stack" hidden>
+          <span class="sublabel" data-i18n="imgLabel">Image du plan (photo, capture, croquis coté)</span>
+          <label class="drop" for="fileImg">
+            <span class="btn" data-i18n="chooseImage">Choisir une image</span>
+            <span class="fname" id="fileImgName" data-i18n="dropHint">ou glissez-le ici</span>
+            <input type="file" id="fileImg" accept="image/*">
+          </label>
+          <p class="hint" data-i18n="calHint">Calage : cliquez sur deux points dont vous connaissez la position en mm (par exemple deux croisements de la grille), puis indiquez leurs coordonnées.</p>
+          <div class="row">
+            <span class="hint" data-i18n="nextClick">Prochain clic place :</span>
+            <label class="check"><input type="radio" name="calNext" value="A" checked> A</label>
+            <label class="check"><input type="radio" name="calNext" value="B"> B</label>
+            <label for="calZoom" class="row" style="margin-left:auto"><span>Zoom</span>
+              <select id="calZoom" style="width:auto"><option value="0.5">50 %</option><option value="1" selected>100 %</option><option value="2">200 %</option><option value="4">400 %</option></select>
+            </label>
+          </div>
+          <div id="calCanvasWrap"><canvas id="calCanvas" width="10" height="10" data-i18n-aria="calCanvas" aria-label="Image à caler"></canvas></div>
+          <div class="calrow"><b>A</b>
+            <label for="aPx">px x<input type="number" id="aPx" step="any"></label>
+            <label for="aPy">px y<input type="number" id="aPy" step="any"></label>
+            <label for="aX">X mm<input type="number" id="aX" step="any" value="10"></label>
+            <label for="aY">Y mm<input type="number" id="aY" step="any" value="10"></label>
+          </div>
+          <div class="calrow"><b>B</b>
+            <label for="bPx">px x<input type="number" id="bPx" step="any"></label>
+            <label for="bPy">px y<input type="number" id="bPy" step="any"></label>
+            <label for="bX">X mm<input type="number" id="bX" step="any" value="70"></label>
+            <label for="bY">Y mm<input type="number" id="bY" step="any" value="70"></label>
+          </div>
+          <div class="grid2">
+            <label for="imgMode"><span data-i18n="imgMode">Type de dessin</span>
+              <select id="imgMode">
+                <option value="trait" data-i18n="modeLine">Trait fermé (croquis)</option>
+                <option value="plein" data-i18n="modeSolid">Forme pleine sombre (avec trous)</option>
+              </select>
+            </label>
+            <label for="imgThr"><span><span data-i18n="threshold">Seuil de noir</span> : <span id="imgThrVal">80</span></span>
+              <input type="range" id="imgThr" min="20" max="240" value="80">
+            </label>
+          </div>
+          <div class="row">
+            <button class="btn primary" id="btnTrace" type="button" disabled data-i18n="trace">Détecter le contour</button>
+            <label class="check"><input type="checkbox" id="showImg" checked><span data-i18n="showImg">Image sous le plan</span></label>
+          </div>
+          <p class="hint" id="imgInfo"></p>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-interp">
+        <h2 id="h-interp"><span class="num">2</span><span data-i18n="hInterp">Lecture du plan</span></h2>
+        <div class="choice" role="radiogroup" data-i18n-aria="interpGroup" aria-label="Ce que représente le plan">
+          <label><input type="radio" name="interp" value="piece" checked><span><span data-i18n="interpPiece">Contour de la pièce</span><small data-i18n="interpPieceHint">La fraise passe à côté du trait, décalée d'un rayon : vers l'extérieur pour le contour, vers l'intérieur pour un trou.</small></span></label>
+          <label><input type="radio" name="interp" value="path"><span><span data-i18n="interpPath">Trajectoire de la fraise</span><small data-i18n="interpPathHint">Les points sont déjà le centre de la fraise, comme sur le croquis de la pièce 11.</small></span></label>
+        </div>
+        <label for="snap"><span data-i18n="snap">Pas d'accrochage des clics et de l'image (mm)</span>
+          <input type="number" id="snap" value="0.5" step="any" min="0">
+        </label>
+      </section>
+
+      <section class="panel" aria-labelledby="h-stock">
+        <h2 id="h-stock"><span class="num">3</span><span data-i18n="hStock">Brut et origine</span></h2>
+        <div class="grid3">
+          <label for="stW"><span data-i18n="stW">Brut X (mm)</span><input type="number" id="stW" value="80" step="any" min="1"></label>
+          <label for="stH"><span data-i18n="stH">Brut Y (mm)</span><input type="number" id="stH" value="80" step="any" min="1"></label>
+          <label for="stT"><span data-i18n="stT">Épaisseur (mm)</span><input type="number" id="stT" value="3" step="any" min="0.1"></label>
+        </div>
+        <div class="choice" role="radiogroup" data-i18n-aria="placeGroup" aria-label="Position de la pièce dans le brut">
+          <span class="sublabel" data-i18n="placeGroup">Position de la pièce dans le brut</span>
+          <label><input type="radio" name="place" value="corner" checked><span><span data-i18n="placeCorner">Coin bas-gauche de la pièce à</span>
+            <small class="row" style="gap:6px;margin-top:4px">X <input type="number" id="x0" value="10" step="any" style="width:72px"> Y <input type="number" id="y0" value="10" step="any" style="width:72px"> <span data-i18n="placeCornerEnd">mm du coin bas-gauche du brut</span></small></span></label>
+          <label><input type="radio" name="place" value="center"><span data-i18n="placeCenter">Centrée dans le brut</span></label>
+          <label><input type="radio" name="place" value="keep"><span data-i18n="placeKeep">Garder les coordonnées du plan</span></label>
+        </div>
+        <div class="grid2">
+          <label for="orgXY"><span data-i18n="orgXY">Origine programme X0 Y0</span>
+            <select id="orgXY">
+              <option value="stock-bl" selected data-i18n="oSBL">Coin bas-gauche du brut</option>
+              <option value="stock-br" data-i18n="oSBR">Coin bas-droit du brut</option>
+              <option value="stock-tl" data-i18n="oSTL">Coin haut-gauche du brut</option>
+              <option value="stock-tr" data-i18n="oSTR">Coin haut-droit du brut</option>
+              <option value="stock-c" data-i18n="oSC">Centre du brut</option>
+              <option value="piece-bl" data-i18n="oPBL">Coin bas-gauche de la pièce</option>
+              <option value="piece-c" data-i18n="oPC">Centre de la pièce</option>
+            </select>
+          </label>
+          <label for="orgZ"><span data-i18n="orgZ">Origine Z0</span>
+            <select id="orgZ">
+              <option value="top" selected data-i18n="zTop">Dessus du brut</option>
+              <option value="bottom" data-i18n="zBottom">Dessous du brut (table)</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" id="orgInfo"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-mach">
+        <div class="headrow">
+          <h2 id="h-mach"><span class="num">4</span><span data-i18n="hMach">Machine et coupe</span></h2>
+          <button class="btn ghost" id="btnReset" type="button" data-i18n="reset">Réglages par défaut</button>
+        </div>
+        <div class="grid3">
+          <label for="toolD"><span data-i18n="toolD">Fraise Ø (mm)</span><input type="number" id="toolD" value="2" step="any" min="0.1"></label>
+          <label for="depth"><span data-i18n="depth">Profondeur (mm)</span><input type="number" id="depth" value="3" step="any" min="0.1"></label>
+          <label for="step"><span data-i18n="step">Passe max (mm)</span><input type="number" id="step" value="1" step="any" min="0.1"></label>
+          <label for="spindle"><span data-i18n="spindle">Broche S (tr/min)</span><input type="number" id="spindle" value="5500" step="1" min="0"></label>
+          <label for="feed"><span data-i18n="feed">Avance F (mm/min)</span><input type="number" id="feed" value="150" step="1" min="1"></label>
+          <label for="toolNo"><span data-i18n="toolNo">Outil T / D</span><input type="number" id="toolNo" value="17" step="1" min="0"></label>
+          <label for="safeZ"><span data-i18n="safeZ">Z approche</span><input type="number" id="safeZ" value="3" step="any"></label>
+          <label for="retZ"><span data-i18n="retZ">Z fin</span><input type="number" id="retZ" value="20" step="any"></label>
+          <label for="dir"><span data-i18n="dir">Sens</span>
+            <select id="dir"><option value="cw" data-i18n="cw">Horaire</option><option value="ccw" data-i18n="ccw">Anti-horaire</option></select>
+          </label>
+        </div>
+        <div class="grid2">
+          <label for="arcs"><span data-i18n="arcs">Arcs de cercle</span>
+            <select id="arcs">
+              <option value="R" selected data-i18n="arcR">G2/G3 avec R</option>
+              <option value="IJ" data-i18n="arcIJ">G2/G3 avec I J</option>
+              <option value="none" data-i18n="arcNone">Segments G1 seulement</option>
+            </select>
+          </label>
+          <label for="arcTol"><span data-i18n="arcTol">Tolérance des arcs (mm)</span><input type="number" id="arcTol" value="0.01" step="any" min="0.001"></label>
+          <label for="prog"><span data-i18n="prog">N° de programme (%)</span><input type="number" id="prog" value="1" step="1" min="0"></label>
+          <label for="pname"><span data-i18n="pname">Nom (commentaire)</span><input type="text" id="pname" value="piece 11"></label>
+        </div>
+      </section>
+    </div>
+
+    <!-- Colonne résultat -->
+    <div class="col">
+      <section class="panel" aria-labelledby="h-view">
+        <div class="headrow">
+          <h2 id="h-view"><span class="num">5</span><span data-i18n="hView">Vérifier</span></h2>
+          <div class="tabs" role="tablist" data-i18n-aria="viewTabs" aria-label="Vue">
+            <button role="tab" id="tab-plan" aria-selected="true" aria-controls="pane-plan" data-i18n="tabPlan">Plan et trajectoire</button>
+            <button role="tab" id="tab-sim" aria-selected="false" aria-controls="pane-sim" data-i18n="tabSim">Simulation 3D</button>
+          </div>
+        </div>
+        <div class="stats" id="stats"></div>
+        <ul class="msgs" id="msgs" aria-live="polite"></ul>
+
+        <div id="pane-plan" role="tabpanel" aria-labelledby="tab-plan" class="stack">
+          <div class="viewer">
+            <svg id="plan" viewBox="0 0 100 100" role="img" data-i18n-aria="planAria" aria-label="Plan du brut, de la pièce et de la trajectoire"></svg>
+            <span class="cursorpos" id="cursorPos">X — Y —</span>
+          </div>
+          <div class="legend">
+            <span><i style="border-color:var(--wood-dark)"></i><span data-i18n="lgStock">Brut</span></span>
+            <span><i style="border-color:var(--ink)"></i><span data-i18n="lgPart">Pièce</span></span>
+            <span><i style="border-color:var(--cut);border-top-width:6px;opacity:.45"></i><span data-i18n="lgSweep">Passage de la fraise</span></span>
+            <span><i style="border-color:var(--accent)"></i><span data-i18n="lgCentre">Centre de la fraise et sens</span></span>
+            <span><i style="border-color:var(--rapid);border-top-style:dashed"></i><span data-i18n="lgRapid">Déplacement rapide G0</span></span>
+          </div>
+        </div>
+
+        <div id="pane-sim" role="tabpanel" aria-labelledby="tab-sim" class="stack" hidden>
+          <div class="viewer" id="sim3d"><div class="nosim" id="noSim" hidden data-i18n="noSim">La vue 3D a besoin d'une connexion internet au premier chargement (bibliothèque three.js).</div></div>
+          <div class="simbar">
+            <div class="row">
+              <button class="btn primary" id="simPlay" type="button"><svg class="ico fill" viewBox="0 0 24 24" aria-hidden="true"><use id="simPlayIco" href="#i-play"/></svg><span id="simPlayLbl" data-i18n="play">Lecture</span></button>
+              <button class="btn" id="simRestart" type="button" data-i18n="restart">Recommencer</button>
+              <button class="btn" id="simEnd" type="button" data-i18n="toEnd">Aller à la fin</button>
+              <label for="simSpeed" class="row"><span data-i18n="speed">Vitesse</span>
+                <select id="simSpeed" style="width:auto"><option value="1" data-i18n="speed1">×1 (réel)</option><option value="5">×5</option><option value="20" selected>×20</option><option value="60">×60</option><option value="200">×200</option></select>
+              </label>
+              <button class="btn" id="simView" type="button" data-i18n="topView">Vue de dessus</button>
+            </div>
+            <label for="simTime" class="sr" data-i18n="progress">Avancement</label>
+            <input type="range" id="simTime" min="0" max="1000" value="0" step="1">
+            <div class="dro" id="dro"></div>
+            <p class="hint" data-i18n="simHint">Glisser : tourner · clic droit ou Maj + glisser : déplacer · molette : zoom. Cliquez une ligne du Gcode pour y aller.</p>
+            <details id="extDetails">
+              <summary data-i18n="simOther">Simuler un autre Gcode</summary>
+              <div class="stack" style="margin-top:8px">
+                <label class="drop" for="fileGcode">
+                  <span class="btn" data-i18n="chooseFile">Choisir un fichier</span>
+                  <span class="fname" id="fileGcodeName" data-i18n="dropHint">ou glissez-le ici</span>
+                  <input type="file" id="fileGcode" accept=".txt,.nc,.gcode,.ngc,.tap,.iso">
+                </label>
+                <textarea id="extGcode" rows="5" data-i18n-ph="pasteGcode" placeholder="Ou collez un Gcode ici" spellcheck="false"></textarea>
+                <div class="row"><button class="btn" id="btnSimExt" type="button" data-i18n="simThis">Simuler ce Gcode</button><button class="btn ghost" id="btnSimGen" type="button" data-i18n="simBack" hidden>Revenir au Gcode généré</button></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-gcode">
+        <div class="headrow">
+          <h2 id="h-gcode"><span class="num">6</span><span>Gcode</span> <span class="badge" id="gcodeBadge"></span></h2>
+          <div class="row">
+            <button class="btn primary" id="btnCopy" type="button" data-i18n="copy">Copier</button>
+            <button class="btn" id="btnDownload" type="button" data-i18n="download">Télécharger .txt</button>
+          </div>
+        </div>
+        <p class="safety"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg><span data-i18n="safety">Relisez le Gcode et regardez la simulation avant d'usiner. Brut bien bridé, carter fermé, et demandez à un encadrant en cas de doute.</span></p>
+        <div class="gcode" id="gcodeView" role="list" data-i18n-aria="gcodeAria" aria-label="Lignes du Gcode"></div>
+        <textarea id="gcodeRaw" class="sr" aria-hidden="true" tabindex="-1"></textarea>
+        <details open>
+          <summary data-i18n="keyTitle">Code couleur des lignes</summary>
+          <ul class="gkey" style="margin-top:8px">
+            <li><code class="k-cm">% ( )</code><span data-i18n="keyCm">Début de programme et commentaires, ignorés par la machine</span></li>
+            <li><code class="k-mc">T S M</code><span data-i18n="keyMc">Réglages machine : outil (T D M6), broche (S M3), fin (M2)</span></li>
+            <li><code class="k-g0">G0</code><span data-i18n="keyG0">Déplacement rapide, fraise hors de la matière</span></li>
+            <li><code class="k-z">G1 Z</code><span data-i18n="keyZ">Descente dans la matière ou remontée, à l'avance F</span></li>
+            <li><code class="k-g1">G1 X Y</code><span data-i18n="keyG1">Coupe en ligne droite</span></li>
+            <li><code class="k-arc">G2 G3</code><span data-i18n="keyArc">Coupe en arc : G2 horaire, G3 anti-horaire</span></li>
+            <li><span class="cur"></span><span data-i18n="keyCur">Ligne en cours dans la simulation (cliquez une ligne pour y aller)</span></li>
+          </ul>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel" id="help" aria-labelledby="h-help">
+    <h2 id="h-help"><span data-i18n="helpTitle">Mode d'emploi</span></h2>
+    <ol class="help">
+      <li><span><b data-i18n="help1t">Décrire la pièce</b><span data-i18n="help1">Saisissez les points, importez un DXF ou SVG (Fusion 360 : clic droit sur l'esquisse, Enregistrer au format DXF), ou calez une photo du plan sur deux points connus.</span></span></li>
+      <li><span><b data-i18n="help2t">Dire ce que représente le plan</b><span data-i18n="help2">Le contour de la pièce (la fraise est décalée d'un rayon) ou directement la trajectoire du centre de la fraise.</span></span></li>
+      <li><span><b data-i18n="help3t">Régler le brut et la coupe</b><span data-i18n="help3">Dimensions du brut, place de la pièce, origine X0 Y0 Z0, fraise, profondeur, passes et vitesses.</span></span></li>
+      <li><span><b data-i18n="help4t">Vérifier puis usiner</b><span data-i18n="help4">Contrôlez le plan et la simulation 3D, puis copiez ou téléchargez le Gcode pour la machine.</span></span></li>
+    </ol>
+    <p class="hint" data-i18n="helpLimits">Limites de la bêta : détourage de contours uniquement (pas de poche ni de gravure), pas d'attaches pour tenir la pièce, une seule fraise. Les réglages restent enregistrés dans ce navigateur.</p>
+  </section>
+
+  <footer class="foot">
+    <span>© 2026 Alexandre BARAKAT · CREAO TECH · CNC Slicer <span data-i18n="beta">bêta V0.1</span></span>
+    <span data-i18n="privacy">Tout est calculé dans votre navigateur : aucun fichier n'est envoyé.</span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script id="slicer-core">
+/* SlicerCore : géométrie, imports (saisie, Gcode, DXF, chemins SVG, image), génération et lecture de Gcode.
+   Code pur, sans DOM : utilisable dans la page et dans les tests Node. */
+(function (root) {
+  'use strict';
+
+  /* ---------- langue des messages (fr / en) ---------- */
+  let LANG = 'fr';
+  const T = (fr, en) => (LANG === 'en' ? en : fr);
+  function setLang(l) { LANG = l === 'en' ? 'en' : 'fr'; }
+
+  /* ---------- outils numériques ---------- */
+  function fmt(v) {
+    let r = Math.round(v * 1000) / 1000;
+    if (Math.abs(r) < 1e-9) r = 0;
+    return String(r);
+  }
+  function num(s) { return parseFloat(String(s).replace(',', '.')); }
+  function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  function signedArea(p) {
+    let a = 0;
+    for (let i = 0; i < p.length; i++) {
+      const q = p[i], r = p[(i + 1) % p.length];
+      a += q[0] * r[1] - r[0] * q[1];
+    }
+    return a / 2;
+  }
+  function bbox(polys) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of polys) for (const q of p) {
+      if (q[0] < x0) x0 = q[0]; if (q[1] < y0) y0 = q[1];
+      if (q[0] > x1) x1 = q[0]; if (q[1] > y1) y1 = q[1];
+    }
+    return { x0, y0, x1, y1 };
+  }
+  function perimeter(p) { let L = 0; for (let i = 0; i < p.length; i++) L += dist(p[i], p[(i + 1) % p.length]); return L; }
+
+  /* Supprime les doublons, la fermeture répétée et les points alignés. */
+  function clean(poly, tol) {
+    tol = tol || 1e-6;
+    const out = [];
+    for (const q of poly) if (!out.length || dist(out[out.length - 1], q) > tol) out.push([q[0], q[1]]);
+    while (out.length > 1 && dist(out[0], out[out.length - 1]) <= tol) out.pop();
+    let changed = true;
+    while (changed && out.length > 3) {
+      changed = false;
+      for (let i = 0; i < out.length; i++) {
+        const a = out[(i - 1 + out.length) % out.length], b = out[i], c = out[(i + 1) % out.length];
+        const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        const scale = Math.max(1, dist(a, b) + dist(b, c));
+        if (Math.abs(cr) <= tol * scale || dist(a, b) <= tol || dist(b, c) <= tol) { out.splice(i, 1); changed = true; break; }
+      }
+    }
+    return out;
+  }
+
+  function lineIntersect(p1, p2, p3, p4) {
+    const d = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0]);
+    if (Math.abs(d) < 1e-12) return null;
+    const t = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / d;
+    return [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
+  }
+
+  /* Décalage d'un polygone fermé : d > 0 agrandit la surface, d < 0 la réduit.
+     Coins vifs en onglet (comme le Gcode d'exemple), biseau si l'angle est très aigu. */
+  function offsetPolygon(poly, d) {
+    const p = clean(poly);
+    if (p.length < 3 || d === 0) return p;
+    const ccw = signedArea(p) > 0;
+    const pts = ccw ? p : p.slice().reverse();
+    const n = pts.length, lines = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n], L = dist(a, b);
+      const nx = (b[1] - a[1]) / L, ny = -(b[0] - a[0]) / L;
+      lines.push({ a: [a[0] + nx * d, a[1] + ny * d], b: [b[0] + nx * d, b[1] + ny * d] });
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const l1 = lines[(i - 1 + n) % n], l2 = lines[i];
+      const ip = lineIntersect(l1.a, l1.b, l2.a, l2.b);
+      if (!ip) out.push(l2.a);
+      else if (dist(ip, pts[i]) > Math.abs(d) * 4) out.push(l1.b, l2.a);
+      else out.push(ip);
+    }
+    const res = clean(out);
+    return ccw ? res : res.reverse();
+  }
+
+  function pointInPoly(pt, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function orient(a, b, c) { return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); }
+  function segsCross(a, b, c, d) {
+    const o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+    const e = 1e-9;
+    return ((o1 > e && o2 < -e) || (o1 < -e && o2 > e)) && ((o3 > e && o4 < -e) || (o3 < -e && o4 > e));
+  }
+  function selfIntersects(p) {
+    const n = p.length;
+    for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (segsCross(p[i], p[(i + 1) % n], p[j], p[(j + 1) % n])) return true;
+    }
+    return false;
+  }
+  function interiorPoint(p) {
+    // milieu du premier côté, décalé d'un epsilon vers l'intérieur
+    const ccw = signedArea(p) > 0;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], b = p[(i + 1) % p.length], L = dist(a, b);
+      if (L < 1e-6) continue;
+      let nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L;
+      if (!ccw) { nx = -nx; ny = -ny; }
+      const m = [(a[0] + b[0]) / 2 + nx * 1e-3, (a[1] + b[1]) / 2 + ny * 1e-3];
+      if (pointInPoly(m, p)) return m;
+    }
+    return p[0];
+  }
+
+  /* Douglas-Peucker sur un contour fermé. */
+  function rdpOpen(pts, eps) {
+    if (pts.length < 3) return pts.slice();
+    const a = pts[0], b = pts[pts.length - 1];
+    let dmax = -1, idx = 0;
+    const L = dist(a, b);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = L < 1e-12 ? dist(pts[i], a) : Math.abs(orient(a, b, pts[i])) / L;
+      if (d > dmax) { dmax = d; idx = i; }
+    }
+    if (dmax <= eps) return [a, b];
+    const left = rdpOpen(pts.slice(0, idx + 1), eps), right = rdpOpen(pts.slice(idx), eps);
+    return left.slice(0, -1).concat(right);
+  }
+  function rdpClosed(p, eps) {
+    if (p.length < 4) return p.slice();
+    let k = 0, dmax = -1;
+    for (let i = 1; i < p.length; i++) { const d = dist(p[0], p[i]); if (d > dmax) { dmax = d; k = i; } }
+    const a = rdpOpen(p.slice(0, k + 1), eps), b = rdpOpen(p.slice(k).concat([p[0]]), eps);
+    return clean(a.slice(0, -1).concat(b.slice(0, -1)));
+  }
+  function snapPoly(p, step) {
+    if (!step || step <= 0) return p.map(q => [q[0], q[1]]);
+    return clean(p.map(q => [Math.round(q[0] / step) * step, Math.round(q[1] / step) * step]));
+  }
+
+  /* Assemble des tracés ouverts (segments DXF/SVG) en contours fermés. */
+  function joinChains(chains, tol) {
+    tol = tol || 0.01;
+    const pool = chains.filter(c => c.length >= 2).map(c => c.map(q => [q[0], q[1]]));
+    const loops = [], open = [];
+    while (pool.length) {
+      let c = pool.shift();
+      let grown = true;
+      while (dist(c[0], c[c.length - 1]) > tol && grown) {
+        grown = false;
+        const end = c[c.length - 1];
+        for (let i = 0; i < pool.length; i++) {
+          const o = pool[i];
+          if (dist(o[0], end) <= tol) { c = c.concat(o.slice(1)); }
+          else if (dist(o[o.length - 1], end) <= tol) { c = c.concat(o.slice().reverse().slice(1)); }
+          else continue;
+          pool.splice(i, 1); grown = true; break;
+        }
+      }
+      if (dist(c[0], c[c.length - 1]) <= tol && c.length >= 4) loops.push(clean(c.slice(0, -1)));
+      else open.push(c);
+    }
+    return { loops: loops.filter(l => l.length >= 3), open };
+  }
+  function dedupeLoops(loops) {
+    const out = [];
+    for (const l of loops) {
+      const key = l.map(q => fmt(q[0]) + ',' + fmt(q[1])).sort().join(';');
+      if (!out.some(o => o.key === key)) out.push({ key, l });
+    }
+    return out.map(o => o.l);
+  }
+
+  /* ---------- saisie texte (points ou Gcode collé) ---------- */
+  function parseInput(text) {
+    const warnings = [];
+    if (/\bG0?[01]\b/i.test(text) && /[XY]\s*-?\d/i.test(text)) return parseGcodeContours(text);
+    const contours = [];
+    let cur = [];
+    const flush = () => { if (cur.length) contours.push(cur); cur = []; };
+    const lines = text.split(/\r?\n/);
+    lines.forEach((raw, ln) => {
+      const line = raw.replace(/#.*$/, '').replace(/\/\/.*$/, '').trim();
+      if (!line || /^-{3,}$/.test(line)) { flush(); return; }
+      let rel = false, s = line;
+      if (s[0] === '@') { rel = true; s = s.slice(1).trim(); }
+      let toks;
+      if (s.includes(';')) toks = s.split(';');
+      else toks = s.split(/\s+/);
+      if (toks.length === 1 && toks[0].includes(',')) toks = toks[0].split(',');
+      toks = toks.map(t => t.trim()).filter(Boolean);
+      const x = num(toks[0]), y = num(toks[1]);
+      if (toks.length < 2 || !isFinite(x) || !isFinite(y)) { warnings.push({ level: 'warn', msg: T('Ligne ' + (ln + 1) + ' ignorée : « ' + raw.trim() + ' » (attendu : X Y en mm).', 'Line ' + (ln + 1) + ' ignored: “' + raw.trim() + '” (expected: X Y in mm).') }); return; }
+      let pt = [x, y];
+      if (rel) {
+        const last = cur.length ? cur[cur.length - 1] : (contours.length ? contours[contours.length - 1].slice(-1)[0] : [0, 0]);
+        pt = [last[0] + x, last[1] + y];
+      }
+      if (cur.length >= 3 && dist(pt, cur[0]) < 1e-6) { flush(); return; }
+      cur.push(pt);
+    });
+    flush();
+    return { contours, warnings };
+  }
+
+  /* Lit un Gcode et rend les contours parcourus à la première profondeur de coupe. */
+  function parseGcodeContours(text) {
+    const moves = parseGcode(text).moves;
+    let zFirst = null;
+    for (const m of moves) if (m.to[2] < 0) { zFirst = m.to[2]; break; }
+    const contours = [];
+    if (zFirst === null) return { contours, warnings: [{ level: 'warn', msg: T('Gcode collé : aucune passe sous Z0 trouvée.', 'Pasted G-code: no pass below Z0 found.') }] };
+    let cur = null;
+    for (const m of moves) {
+      const z = m.to[2];
+      if (Math.abs(z - zFirst) < 1e-6) {
+        if (!cur) { cur = [[m.from[0], m.from[1]]]; contours.push(cur); }
+        cur.push([m.to[0], m.to[1]]);
+      } else cur = null;
+    }
+    return { contours: dedupeLoops(contours.map(c => clean(c)).filter(c => c.length >= 3)), warnings: [{ level: 'info', msg: T('Gcode collé : contours relus à Z' + fmt(zFirst) + '. Choisissez « Trajectoire de la fraise ».', 'Pasted G-code: contours read back at Z' + fmt(zFirst) + '. Choose “Cutter path”.') }] };
+  }
+
+  function contoursToText(contours) {
+    return contours.map(c => c.map(q => fmt(q[0]) + ' ' + fmt(q[1])).join('\n')).join('\n\n');
+  }
+
+  /* ---------- lecture de Gcode (pour la simulation) ---------- */
+  /* Lecture tolérante : minuscules, mots collés (X-1Y4), espaces (Y 21), commentaires ( ) et ;,
+     G0/G1/G2/G3 (arcs en R ou I J, découpés en petits segments). */
+  function parseGcode(text) {
+    const moves = [], warnings = [];
+    let pos = [0, 0, 50], mode = 0, feed = 0, started = false, spindle = false;
+    const lines = text.split(/\r?\n/);
+    lines.forEach((raw, i) => {
+      const line = raw.replace(/\(.*?\)/g, '').replace(/;.*$/, '').toUpperCase();
+      const words = {};
+      const re = /([A-Z])\s*([-+]?\d*\.?\d+)/g;
+      let m; const gs = [];
+      while ((m = re.exec(line))) { if (m[1] === 'G') gs.push(+m[2]); else if (m[1] === 'M') { if (+m[2] === 3 || +m[2] === 4) spindle = true; } else words[m[1]] = +m[2]; }
+      for (const g of gs) if (g >= 0 && g <= 3 && Number.isInteger(g)) mode = g;
+      if (words.F !== undefined && mode !== 0) feed = words.F;
+      if (words.X === undefined && words.Y === undefined && words.Z === undefined) return;
+      const to = [words.X !== undefined ? words.X : pos[0], words.Y !== undefined ? words.Y : pos[1], words.Z !== undefined ? words.Z : pos[2]];
+      if (!started) {
+        // la position de départ est inconnue : on part au-dessus du premier point
+        pos = [to[0], to[1], Math.max(words.Z !== undefined ? to[2] : 20, 20)];
+        started = true;
+        if (mode !== 0 && to[2] < 0) moves.push({ from: pos.slice(), to: [to[0], to[1], 5], rapid: true, feed, line: i });
+        if (mode !== 0 && to[2] < 0) pos = [to[0], to[1], 5];
+      }
+      if ((mode === 2 || mode === 3) && (words.R !== undefined || words.I !== undefined || words.J !== undefined)) {
+        const pts = arcGcode(pos, to, mode === 2, words);
+        let prev = pos.slice();
+        for (const q of pts) { moves.push({ from: prev, to: q, rapid: false, feed, line: i, arc: true }); prev = q; }
+      } else moves.push({ from: pos.slice(), to, rapid: mode === 0, feed, line: i });
+      if (mode !== 0 && to[2] < 0 && !spindle && !warnings.length) warnings.push({ level: 'warn', msg: T('Ligne ' + (i + 1) + ' : la fraise coupe sans broche démarrée (pas de M3 avant).', 'Line ' + (i + 1) + ': the cutter cuts with the spindle stopped (no M3 before).') });
+      if (mode !== 0 && !feed && !warnings.some(w => w.f)) warnings.push({ level: 'warn', msg: T('Ligne ' + (i + 1) + ' : avance F non définie.', 'Line ' + (i + 1) + ': feed F not set.'), f: 1 });
+      pos = to;
+    });
+    return { moves, warnings };
+  }
+  function arcGcode(from, to, cw, w) {
+    let cx, cy;
+    const x0 = from[0], y0 = from[1], x1 = to[0], y1 = to[1];
+    if (w.R !== undefined) {
+      const c = Math.hypot(x1 - x0, y1 - y0);
+      if (c < 1e-9) return [to];
+      let R = w.R;
+      const h = Math.sqrt(Math.max(0, R * R - c * c / 4));
+      const ux = (x1 - x0) / c, uy = (y1 - y0) / c;
+      let s = cw ? -1 : 1;
+      if (R < 0) s = -s;
+      cx = (x0 + x1) / 2 - uy * h * s; cy = (y0 + y1) / 2 + ux * h * s;
+    } else { cx = x0 + (w.I || 0); cy = y0 + (w.J || 0); }
+    const r = Math.hypot(x0 - cx, y0 - cy);
+    const a0 = Math.atan2(y0 - cy, x0 - cx);
+    let a1 = Math.atan2(y1 - cy, x1 - cx);
+    let sweep = a1 - a0;
+    if (cw) { while (sweep >= -1e-9) sweep -= 2 * Math.PI; if (sweep < -2 * Math.PI) sweep += 2 * Math.PI; }
+    else { while (sweep <= 1e-9) sweep += 2 * Math.PI; if (sweep > 2 * Math.PI) sweep -= 2 * Math.PI; }
+    if (Math.hypot(x1 - x0, y1 - y0) < 1e-9) sweep = cw ? -2 * Math.PI : 2 * Math.PI;
+    const n = Math.max(2, Math.ceil(Math.abs(sweep) * r / 0.5), Math.ceil(Math.abs(sweep) / (Math.PI / 36)));
+    const pts = [];
+    for (let k = 1; k <= Math.min(n, 2000); k++) {
+      const t = a0 + sweep * k / Math.min(n, 2000);
+      pts.push([cx + r * Math.cos(t), cy + r * Math.sin(t), from[2] + (to[2] - from[2]) * k / Math.min(n, 2000)]);
+    }
+    pts[pts.length - 1] = to.slice();
+    return pts;
+  }
+
+  /* ---------- DXF ---------- */
+  function bulgeArc(p1, p2, b) {
+    const c = dist(p1, p2);
+    if (Math.abs(b) < 1e-9 || c < 1e-9) return [p2];
+    const theta = 4 * Math.atan(b);
+    const ux = (p2[0] - p1[0]) / c, uy = (p2[1] - p1[1]) / c;
+    const h = (c / 2) * (1 - b * b) / (2 * b);
+    const cx = (p1[0] + p2[0]) / 2 - uy * h, cy = (p1[1] + p2[1]) / 2 + ux * h;
+    const r = Math.hypot(p1[0] - cx, p1[1] - cy);
+    const a1 = Math.atan2(p1[1] - cy, p1[0] - cx);
+    const n = Math.max(2, Math.ceil(Math.abs(theta) / (Math.PI / 36)));
+    const pts = [];
+    for (let i = 1; i < n; i++) { const t = a1 + theta * i / n; pts.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]); }
+    pts.push(p2);
+    return pts;
+  }
+  function arcPts(cx, cy, r, a0, a1) {
+    let sweep = a1 - a0; while (sweep <= 0) sweep += 360;
+    const n = Math.max(4, Math.ceil(sweep / 5)), pts = [];
+    for (let i = 0; i <= n; i++) { const t = (a0 + sweep * i / n) * Math.PI / 180; pts.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]); }
+    return pts;
+  }
+  function parseDXF(text, unitOverride) {
+    const L = text.split(/\r?\n/);
+    const pairs = [];
+    for (let i = 0; i + 1 < L.length; i += 2) pairs.push([parseInt(L[i].trim(), 10), L[i + 1].trim()]);
+    let insunits = 0;
+    for (let i = 0; i < pairs.length; i++) if (pairs[i][0] === 9 && pairs[i][1] === '$INSUNITS') { insunits = parseInt(pairs[i + 1][1], 10) || 0; break; }
+    let i = 0;
+    while (i < pairs.length && !(pairs[i][0] === 2 && pairs[i][1] === 'ENTITIES')) i++;
+    const ents = [];
+    let curE = null;
+    for (; i < pairs.length; i++) {
+      const [c, v] = pairs[i];
+      if (c === 0) { if (v === 'ENDSEC') break; curE = { type: v, g: [] }; ents.push(curE); }
+      else if (curE) curE.g.push([c, v]);
+    }
+    const get = (e, c) => { const p = e.g.find(q => q[0] === c); return p ? parseFloat(p[1]) : 0; };
+    const chains = [], closed = [], warnings = [];
+    let skipped = {};
+    for (let k = 0; k < ents.length; k++) {
+      const e = ents[k];
+      if (e.type === 'LINE') chains.push([[get(e, 10), get(e, 20)], [get(e, 11), get(e, 21)]]);
+      else if (e.type === 'LWPOLYLINE') {
+        const vs = [];
+        for (const [c, v] of e.g) {
+          if (c === 10) vs.push({ x: parseFloat(v), y: 0, b: 0 });
+          else if (c === 20 && vs.length) vs[vs.length - 1].y = parseFloat(v);
+          else if (c === 42 && vs.length) vs[vs.length - 1].b = parseFloat(v);
+        }
+        const isClosed = (get(e, 70) & 1) === 1;
+        const pts = polyWithBulges(vs, isClosed);
+        (isClosed ? closed : chains).push(pts);
+      } else if (e.type === 'POLYLINE') {
+        const vs = [];
+        let j = k + 1;
+        for (; j < ents.length && ents[j].type === 'VERTEX'; j++) vs.push({ x: get(ents[j], 10), y: get(ents[j], 20), b: get(ents[j], 42) });
+        k = j;
+        const isClosed = (get(e, 70) & 1) === 1;
+        const pts = polyWithBulges(vs, isClosed);
+        (isClosed ? closed : chains).push(pts);
+      } else if (e.type === 'ARC') chains.push(arcPts(get(e, 10), get(e, 20), get(e, 40), get(e, 50), get(e, 51)));
+      else if (e.type === 'CIRCLE') { const p = arcPts(get(e, 10), get(e, 20), get(e, 40), 0, 360); p.pop(); closed.push(p); }
+      else if (e.type === 'ELLIPSE') {
+        const cx = get(e, 10), cy = get(e, 20), mx = get(e, 11), my = get(e, 21), ratio = get(e, 40) || 1;
+        let t0 = get(e, 41), t1 = e.g.some(q => q[0] === 42) ? get(e, 42) : Math.PI * 2;
+        if (t1 <= t0) t1 += Math.PI * 2;
+        const n = Math.max(8, Math.ceil((t1 - t0) / (Math.PI / 36))), pts = [];
+        for (let s = 0; s <= n; s++) { const t = t0 + (t1 - t0) * s / n; pts.push([cx + mx * Math.cos(t) - my * ratio * Math.sin(t), cy + my * Math.cos(t) + mx * ratio * Math.sin(t)]); }
+        if (Math.abs(t1 - t0 - Math.PI * 2) < 1e-6) { pts.pop(); closed.push(pts); } else chains.push(pts);
+      } else if (e.type === 'SPLINE') {
+        const fit = [], ctrl = [];
+        for (const [c, v] of e.g) {
+          if (c === 11) fit.push([parseFloat(v), 0]); else if (c === 21 && fit.length) fit[fit.length - 1][1] = parseFloat(v);
+          else if (c === 10) ctrl.push([parseFloat(v), 0]); else if (c === 20 && ctrl.length) ctrl[ctrl.length - 1][1] = parseFloat(v);
+        }
+        const pts = fit.length >= 2 ? fit : ctrl;
+        if ((get(e, 70) & 1) === 1) closed.push(pts); else chains.push(pts);
+        warnings.push({ level: 'warn', msg: T('Une courbe SPLINE a été approchée par ses points de contrôle : vérifiez l’aperçu.', 'A SPLINE curve was approximated by its control points: check the drawing.') });
+      } else if (!['VERTEX', 'SEQEND'].includes(e.type)) skipped[e.type] = (skipped[e.type] || 0) + 1;
+    }
+    const units = { 0: 1, 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
+    const unitName = { 0: T('non précisées (mm supposés)', 'not set (mm assumed)'), 1: T('pouces', 'inches'), 2: T('pieds', 'feet'), 4: 'mm', 5: 'cm', 6: 'm' };
+    const scale = unitOverride ? unitOverride : (units[insunits] || 1);
+    const joined = joinChains(chains, 0.01);
+    let loops = dedupeLoops(closed.map(c => clean(c)).concat(joined.loops)).filter(l => l.length >= 3);
+    loops = loops.map(l => l.map(q => [q[0] * scale, q[1] * scale]));
+    if (joined.open.length) warnings.push({ level: 'warn', msg: joined.open.length + T(' tracé(s) ouvert(s) ignoré(s) : seuls les contours fermés sont usinés.', ' open path(s) ignored: only closed contours are machined.') });
+    const sk = Object.keys(skipped).filter(t => !['TEXT', 'MTEXT', 'DIMENSION', 'POINT', 'INSERT', 'HATCH'].includes(t));
+    if (sk.length) warnings.push({ level: 'info', msg: T('Entités DXF ignorées : ', 'Ignored DXF entities: ') + sk.join(', ') + '.' });
+    return { contours: loops, warnings, units: unitName[insunits] || ('code ' + insunits), scale };
+  }
+  function polyWithBulges(vs, isClosed) {
+    if (!vs.length) return [];
+    const pts = [[vs[0].x, vs[0].y]];
+    const n = isClosed ? vs.length : vs.length - 1;
+    for (let i = 0; i < n; i++) {
+      const a = vs[i], b = vs[(i + 1) % vs.length];
+      const seg = bulgeArc([a.x, a.y], [b.x, b.y], a.b);
+      for (const q of seg) pts.push(q);
+    }
+    if (isClosed) pts.pop();
+    return pts;
+  }
+
+  /* ---------- chemins SVG (attribut d) ---------- */
+  function svgArc(x1, y1, rx, ry, phiDeg, fa, fs, x2, y2) {
+    if (rx === 0 || ry === 0) return [[x2, y2]];
+    rx = Math.abs(rx); ry = Math.abs(ry);
+    const phi = phiDeg * Math.PI / 180, cp = Math.cos(phi), sp = Math.sin(phi);
+    const dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+    const x1p = cp * dx + sp * dy, y1p = -sp * dx + cp * dy;
+    const lam = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
+    if (lam > 1) { rx *= Math.sqrt(lam); ry *= Math.sqrt(lam); }
+    const num_ = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+    const den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+    const co = Math.sqrt(Math.max(0, num_ / den)) * (fa === fs ? -1 : 1);
+    const cxp = co * rx * y1p / ry, cyp = -co * ry * x1p / rx;
+    const cx = cp * cxp - sp * cyp + (x1 + x2) / 2, cy = sp * cxp + cp * cyp + (y1 + y2) / 2;
+    const ang = (ux, uy, vx, vy) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+    const t1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let dt = ang((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+    if (!fs && dt > 0) dt -= 2 * Math.PI; else if (fs && dt < 0) dt += 2 * Math.PI;
+    const n = Math.max(2, Math.ceil(Math.abs(dt) / (Math.PI / 36))), pts = [];
+    for (let i = 1; i <= n; i++) {
+      const t = t1 + dt * i / n;
+      pts.push([cx + rx * Math.cos(t) * cp - ry * Math.sin(t) * sp, cy + rx * Math.cos(t) * sp + ry * Math.sin(t) * cp]);
+    }
+    pts[pts.length - 1] = [x2, y2];
+    return pts;
+  }
+  function parsePathD(d) {
+    const toks = d.match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g) || [];
+    let i = 0, cmd = null, x = 0, y = 0, sx = 0, sy = 0, lcx = null, lcy = null, lq = null;
+    const subs = [];
+    let cur = null;
+    const isCmd = t => /^[A-Za-z]$/.test(t);
+    const n = () => parseFloat(toks[i++]);
+    const flag = () => {
+      const t = toks[i];
+      if (t.length > 1 && /^[01]/.test(t)) { toks[i] = t.slice(1); return +t[0]; }
+      i++; return +t;
+    };
+    const start = () => { cur = { pts: [[x, y]], closed: false }; subs.push(cur); };
+    const cubic = (x1, y1, x2, y2, ex, ey) => {
+      const x0 = x, y0 = y;
+      for (let k = 1; k <= 16; k++) {
+        const t = k / 16, u = 1 - t;
+        cur.pts.push([u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * ex, u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * ey]);
+      }
+    };
+    const quad = (x1, y1, ex, ey) => {
+      const x0 = x, y0 = y;
+      for (let k = 1; k <= 12; k++) { const t = k / 12, u = 1 - t; cur.pts.push([u * u * x0 + 2 * u * t * x1 + t * t * ex, u * u * y0 + 2 * u * t * y1 + t * t * ey]); }
+    };
+    while (i < toks.length) {
+      if (isCmd(toks[i])) cmd = toks[i++];
+      else if (cmd === null) { i++; continue; }
+      const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase();
+      const ox = rel ? x : 0, oy = rel ? y : 0;
+      if (C === 'Z') { if (cur) { cur.closed = true; x = sx; y = sy; } cur = null; lcx = lq = null; continue; }
+      if (i >= toks.length || isCmd(toks[i])) { continue; }
+      if (C === 'M') { x = ox + n(); y = oy + n(); sx = x; sy = y; start(); cmd = rel ? 'l' : 'L'; lcx = lq = null; continue; }
+      if (!cur) start();
+      if (C === 'L') { x = ox + n(); y = oy + n(); cur.pts.push([x, y]); lcx = lq = null; }
+      else if (C === 'H') { x = ox + n(); cur.pts.push([x, y]); lcx = lq = null; }
+      else if (C === 'V') { y = oy + n(); cur.pts.push([x, y]); lcx = lq = null; }
+      else if (C === 'C') { const x1 = ox + n(), y1 = oy + n(), x2 = ox + n(), y2 = oy + n(), ex = ox + n(), ey = oy + n(); cubic(x1, y1, x2, y2, ex, ey); x = ex; y = ey; lcx = [x2, y2]; lq = null; }
+      else if (C === 'S') { const x1 = lcx ? 2 * x - lcx[0] : x, y1 = lcx ? 2 * y - lcx[1] : y; const x2 = ox + n(), y2 = oy + n(), ex = ox + n(), ey = oy + n(); cubic(x1, y1, x2, y2, ex, ey); x = ex; y = ey; lcx = [x2, y2]; lq = null; }
+      else if (C === 'Q') { const x1 = ox + n(), y1 = oy + n(), ex = ox + n(), ey = oy + n(); quad(x1, y1, ex, ey); x = ex; y = ey; lq = [x1, y1]; lcx = null; }
+      else if (C === 'T') { const x1 = lq ? 2 * x - lq[0] : x, y1 = lq ? 2 * y - lq[1] : y; const ex = ox + n(), ey = oy + n(); quad(x1, y1, ex, ey); x = ex; y = ey; lq = [x1, y1]; lcx = null; }
+      else if (C === 'A') { const rx = n(), ry = n(), ph = n(), fa = flag(), fs = flag(), ex = ox + n(), ey = oy + n(); for (const q of svgArc(x, y, rx, ry, ph, fa, fs, ex, ey)) cur.pts.push(q); x = ex; y = ey; lcx = lq = null; }
+      else i++;
+    }
+    return subs.filter(s => s.pts.length >= 2);
+  }
+
+  /* ---------- image : détection de contour ---------- */
+  function traceImage(data, w, h, opts) {
+    const thr = opts.threshold == null ? 80 : opts.threshold;
+    const mode = opts.mode || 'trait';
+    const N = w * h, dark = new Uint8Array(N);
+    for (let i = 0; i < N; i++) {
+      const a = data[4 * i + 3];
+      const lum = a < 128 ? 255 : 0.299 * data[4 * i] + 0.587 * data[4 * i + 1] + 0.114 * data[4 * i + 2];
+      dark[i] = lum < thr ? 1 : 0;
+    }
+    let mask;
+    const stack = new Int32Array(N);
+    if (mode === 'trait') {
+      const outside = new Uint8Array(N);
+      let sp = 0;
+      const push = (i) => { if (!outside[i] && !dark[i]) { outside[i] = 1; stack[sp++] = i; } };
+      for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+      for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+      while (sp) {
+        const i = stack[--sp], x = i % w, y = (i - x) / w;
+        if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (y > 0) push(i - w); if (y < h - 1) push(i + w);
+      }
+      mask = new Uint8Array(N);
+      for (let i = 0; i < N; i++) mask[i] = outside[i] ? 0 : 1;
+    } else mask = dark;
+    // composantes connexes (4-voisinage)
+    const label = new Int32Array(N).fill(-1);
+    const comps = [];
+    for (let s = 0; s < N; s++) {
+      if (!mask[s] || label[s] >= 0) continue;
+      const id = comps.length; let area = 0, border = false, sp = 0;
+      label[s] = id; stack[sp++] = s;
+      while (sp) {
+        const i = stack[--sp], x = i % w, y = (i - x) / w; area++;
+        if (x === 0 || y === 0 || x === w - 1 || y === h - 1) border = true;
+        const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+        for (const j of nb) if (j >= 0 && mask[j] && label[j] < 0) { label[j] = id; stack[sp++] = j; }
+      }
+      comps.push({ id, area, border });
+    }
+    const cands = comps.filter(c => !c.border).sort((a, b) => b.area - a.area);
+    const best = cands[0] || comps.slice().sort((a, b) => b.area - a.area)[0];
+    if (!best) return { loops: [], lineWidthPx: 0 };
+    const inC = (x, y) => x >= 0 && y >= 0 && x < w && y < h && label[y * w + x] === best.id;
+    // bords orientés de la composante
+    const edges = new Map();
+    const runs = [];
+    const addE = (ax, ay, bx, by) => {
+      const k = ax + ',' + ay;
+      if (!edges.has(k)) edges.set(k, []);
+      edges.get(k).push([bx, by]);
+    };
+    const runInward = (x, y, dx, dy) => {
+      let r = 0;
+      while (r < 60 && x >= 0 && y >= 0 && x < w && y < h && dark[y * w + x]) { r++; x += dx; y += dy; }
+      return r;
+    };
+    let cnt = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (label[y * w + x] !== best.id) continue;
+      if (!inC(x, y - 1)) { addE(x, y, x + 1, y); if (cnt++ % 3 === 0) runs.push(runInward(x, y, 0, 1)); }
+      if (!inC(x + 1, y)) { addE(x + 1, y, x + 1, y + 1); if (cnt++ % 3 === 0) runs.push(runInward(x, y, -1, 0)); }
+      if (!inC(x, y + 1)) { addE(x + 1, y + 1, x, y + 1); if (cnt++ % 3 === 0) runs.push(runInward(x, y, 0, -1)); }
+      if (!inC(x - 1, y)) { addE(x, y + 1, x, y); if (cnt++ % 3 === 0) runs.push(runInward(x, y, 1, 0)); }
+    }
+    const loops = [];
+    for (const [k0] of edges) {
+      while (edges.get(k0) && edges.get(k0).length) {
+        const [sx, sy] = k0.split(',').map(Number);
+        const loop = [[sx, sy]];
+        let cx = sx, cy = sy, guard = 0;
+        while (guard++ < 4 * N) {
+          const k = cx + ',' + cy, list = edges.get(k);
+          if (!list || !list.length) break;
+          const nxt = list.shift();
+          cx = nxt[0]; cy = nxt[1];
+          if (cx === sx && cy === sy) break;
+          loop.push([cx, cy]);
+        }
+        if (loop.length >= 4) loops.push(loop);
+      }
+    }
+    runs.sort((a, b) => a - b);
+    const lineWidthPx = mode === 'trait' && runs.length ? runs[Math.floor(runs.length / 2)] : 0;
+    const eps = Math.max(1, lineWidthPx * 0.5);
+    const out = loops.map(l => rdpClosed(clean(l), eps)).filter(l => l.length >= 3 && Math.abs(signedArea(l)) > 25)
+      .sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)));
+    return { loops: mode === 'trait' ? out.slice(0, 1) : out, lineWidthPx };
+  }
+
+  /* Pixels -> mm via deux points de calage A et B. */
+  function calibration(A, B) {
+    let sx = Math.abs(B.px - A.px) > 1e-9 ? (B.X - A.X) / (B.px - A.px) : null;
+    let sy = Math.abs(B.py - A.py) > 1e-9 ? (B.Y - A.Y) / (B.py - A.py) : null;
+    if (sx === null && sy === null) return null;
+    if (sx === null) sx = Math.abs(sy);
+    if (sy === null) sy = -Math.abs(sx);
+    return { sx, sy, toMM: (px, py) => [A.X + (px - A.px) * sx, A.Y + (py - A.py) * sy] };
+  }
+
+  /* ---------- préparation des trajectoires et Gcode ---------- */
+  function buildJob(input, o) {
+    const warnings = [];
+    const r = o.toolDiameter / 2;
+    let contours = input.map(c => clean(c)).filter(c => {
+      if (c.length < 3) { warnings.push({ level: 'warn', msg: T('Un contour de moins de 3 points a été ignoré.', 'A contour with fewer than 3 points was ignored.') }); return false; }
+      return true;
+    });
+    if (!contours.length) return { warnings: warnings.concat([{ level: 'warn', msg: T('Aucun contour fermé : saisissez au moins 3 points.', 'No closed contour: enter at least 3 points.') }]), paths: [], pieces: [], gcode: '', stats: null };
+    // trous = contours contenus dans un nombre impair d'autres contours
+    const holes = contours.map((c, i) => {
+      const p = interiorPoint(c);
+      let depth = 0;
+      contours.forEach((d, j) => { if (j !== i && pointInPoly(p, d)) depth++; });
+      return depth % 2 === 1;
+    });
+    let items = contours.map((c, i) => {
+      const isHole = holes[i];
+      let piece, path;
+      if (o.interp === 'path') { path = c; piece = offsetPolygon(c, isHole ? r : -r); }
+      else { piece = c; path = offsetPolygon(c, isHole ? -r : r); }
+      return { isHole, piece, path, src: c };
+    });
+    // placement
+    const outerPieces = () => { const outers = items.filter(it => !it.isHole).map(it => it.piece); return outers.length ? outers : items.map(it => it.piece); };
+    if (o.placement && (o.placement.mode === 'corner' || o.placement.mode === 'center')) {
+      const bb = bbox(outerPieces());
+      const dx = o.placement.mode === 'center' ? o.stock.w / 2 - (bb.x0 + bb.x1) / 2 : o.placement.x0 - bb.x0;
+      const dy = o.placement.mode === 'center' ? o.stock.h / 2 - (bb.y0 + bb.y1) / 2 : o.placement.y0 - bb.y0;
+      if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9) {
+        const mv = p => p.map(q => [q[0] + dx, q[1] + dy]);
+        items = items.map(it => ({ isHole: it.isHole, piece: mv(it.piece), path: mv(it.path), src: mv(it.src) }));
+      }
+    }
+    // contrôles
+    items.forEach((it, k) => {
+      const nm = it.isHole ? T('Le trou n°', 'Hole #') + (k + 1) : T('Le contour n°', 'Contour #') + (k + 1);
+      if (it.isHole && (it.path.length < 3 || signedArea(it.path) * signedArea(it.src) <= 0 || Math.abs(signedArea(it.path)) < 1e-3)) {
+        warnings.push({ level: 'error', msg: nm + T(' est trop petit pour une fraise Ø' + fmt(o.toolDiameter) + ' mm : il est ignoré.', ' is too small for a Ø' + fmt(o.toolDiameter) + ' mm cutter: it is skipped.') }); it.skip = true; return;
+      }
+      if (selfIntersects(it.path)) warnings.push({ level: 'warn', msg: nm + T(' a un détail plus étroit que la fraise Ø' + fmt(o.toolDiameter) + ' mm : la trajectoire se croise, vérifiez l’aperçu.', ' has a detail narrower than the Ø' + fmt(o.toolDiameter) + ' mm cutter: the path crosses itself, check the drawing.') });
+      if (o.interp === 'path' && !it.isHole && (it.piece.length < 3 || signedArea(it.piece) * signedArea(it.src) <= 0)) warnings.push({ level: 'warn', msg: nm + T(' est plus petit que la fraise : la pièce obtenue sera vide.', ' is smaller than the cutter: the resulting part will be empty.') });
+    });
+    items = items.filter(it => !it.skip);
+    const bbP = bbox(items.map(it => it.piece));
+    if (bbP.x0 < -1e-6 || bbP.y0 < -1e-6 || bbP.x1 > o.stock.w + 1e-6 || bbP.y1 > o.stock.h + 1e-6)
+      warnings.push({ level: 'error', msg: T('La pièce sort du brut ' + fmt(o.stock.w) + ' × ' + fmt(o.stock.h) + ' mm (X ' + fmt(bbP.x0) + ' à ' + fmt(bbP.x1) + ', Y ' + fmt(bbP.y0) + ' à ' + fmt(bbP.y1) + ').', 'The part goes outside the ' + fmt(o.stock.w) + ' × ' + fmt(o.stock.h) + ' mm stock (X ' + fmt(bbP.x0) + ' to ' + fmt(bbP.x1) + ', Y ' + fmt(bbP.y0) + ' to ' + fmt(bbP.y1) + ').') });
+    if (o.depth < o.stock.t - 1e-9) warnings.push({ level: 'warn', msg: T('Profondeur ' + fmt(o.depth) + ' mm < épaisseur du brut ' + fmt(o.stock.t) + ' mm : la pièce ne sera pas détachée.', 'Depth ' + fmt(o.depth) + ' mm < stock thickness ' + fmt(o.stock.t) + ' mm: the part will not be cut free.') });
+    if (o.depth > o.stock.t + 1e-9) warnings.push({ level: 'info', msg: T('Profondeur ' + fmt(o.depth) + ' mm > épaisseur ' + fmt(o.stock.t) + ' mm : la fraise entame la planche martyre.', 'Depth ' + fmt(o.depth) + ' mm > thickness ' + fmt(o.stock.t) + ' mm: the cutter goes into the spoilboard.') });
+    if (o.step > 1 + 1e-9) warnings.push({ level: 'warn', msg: T('Passe de ' + fmt(o.step) + ' mm : la consigne est 1 mm maximum.', 'Step-down of ' + fmt(o.step) + ' mm: the rule is 1 mm maximum.') });
+    // sens et point de départ
+    const wantCW = o.direction !== 'ccw';
+    const paths = items.map(it => {
+      let p = it.path.slice();
+      const cw = it.isHole ? !wantCW : wantCW;
+      if ((signedArea(p) < 0) !== cw) p.reverse();
+      const bb = bbox([p]);
+      let k = 0, best = Infinity;
+      p.forEach((q, i) => { const d = Math.hypot(q[0] - bb.x0, q[1] - bb.y0); if (d < best - 1e-9) { best = d; k = i; } });
+      p = p.slice(k).concat(p.slice(0, k));
+      return { pts: p, isHole: it.isHole, piece: it.piece };
+    });
+    // trous d'abord (la pièce reste tenue), puis contours extérieurs
+    paths.sort((a, b) => (b.isHole ? 1 : 0) - (a.isHole ? 1 : 0));
+    // origine programme : les trajectoires restent dans le repère du brut (coin bas-gauche, Z0 = dessus),
+    // le Gcode est écrit dans le repère choisi
+    const origin = originOffset(o, bbox(outerPieces()));
+    const ginfo = {};
+    const gcode = generateGcode(paths.map(p => p.pts.map(q => [q[0] - origin.ox, q[1] - origin.oy])), Object.assign({}, o, { zShift: origin.zShift }), ginfo);
+    const arcsPerPass = ginfo.arcs / depthList(o.depth, o.step).length;
+    if (arcsPerPass > 0) warnings.push({ level: 'info', msg: arcsPerPass + T(' arc(s) de cercle écrit(s) en ' + (o.arcs === 'IJ' ? 'G2/G3 avec I J' : 'G2/G3 avec R') + ' à chaque passe.', ' circular arc(s) written as ' + (o.arcs === 'IJ' ? 'G2/G3 with I J' : 'G2/G3 with R') + ' on each pass.') });
+    const depths = depthList(o.depth, o.step);
+    const len = paths.reduce((s, p) => s + perimeter(p.pts), 0);
+    const cutLen = len * depths.length + paths.length * (o.safeZ + o.depth);
+    const stats = { contours: paths.length, holes: paths.filter(p => p.isHole).length, perimeter: len, passes: depths.length, cutLength: cutLen, minutes: cutLen / o.feed };
+    return { warnings, paths, pieces: items.map(it => ({ pts: it.piece, isHole: it.isHole })), gcode, stats, origin };
+  }
+
+  /* Position de l'origine programme (X0 Y0 Z0) dans le repère du brut. */
+  function originOffset(o, pieceBox) {
+    const W = o.stock.w, H = o.stock.h, org = o.origin || {};
+    const b = pieceBox && isFinite(pieceBox.x0) ? pieceBox : { x0: 0, y0: 0, x1: W, y1: H };
+    const table = {
+      'stock-bl': [0, 0], 'stock-br': [W, 0], 'stock-tl': [0, H], 'stock-tr': [W, H], 'stock-c': [W / 2, H / 2],
+      'piece-bl': [b.x0, b.y0], 'piece-c': [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]
+    };
+    const xy = table[org.xy] || [0, 0];
+    return { ox: xy[0], oy: xy[1], zShift: org.z === 'bottom' ? o.stock.t : 0, xy: org.xy || 'stock-bl', z: org.z || 'top' };
+  }
+
+  function depthList(depth, step) {
+    const d = [];
+    if (!(step > 0)) step = depth;
+    for (let z = step; z < depth - 1e-9; z += step) d.push(Math.round(z * 1000) / 1000);
+    d.push(depth);
+    return d;
+  }
+
+  /* ---------- reconnaissance d'arcs (pour écrire des G2/G3) ---------- */
+  function circle3(a, b, c) {
+    const d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    if (Math.abs(d) < 1e-12) return null;
+    const a2 = a[0] * a[0] + a[1] * a[1], b2 = b[0] * b[0] + b[1] * b[1], c2 = c[0] * c[0] + c[1] * c[1];
+    const ux = (a2 * (b[1] - c[1]) + b2 * (c[1] - a[1]) + c2 * (a[1] - b[1])) / d;
+    const uy = (a2 * (c[0] - b[0]) + b2 * (a[0] - c[0]) + c2 * (b[0] - a[0])) / d;
+    return [ux, uy, Math.hypot(a[0] - ux, a[1] - uy)];
+  }
+  /* Découpe une suite de points (départ … retour au départ) en droites et arcs.
+     Un arc = au moins 3 segments dont tous les sommets sont sur un même cercle (± tol),
+     qui tournent dans le même sens, avec moins de 20° par segment. Arcs limités à 120° :
+     en mode R, un arc proche de 180° rend le centre très sensible aux arrondis. */
+  function fitArcs(pts, tol) {
+    tol = tol || 0.01;
+    const out = [], n = pts.length, MAXSEG = 20 * Math.PI / 180, MAXARC = 120 * Math.PI / 180;
+    const segAng = (c, a, b) => {
+      const ax = a[0] - c[0], ay = a[1] - c[1], bx = b[0] - c[0], by = b[1] - c[1];
+      return Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+    };
+    let i = 0;
+    while (i < n - 1) {
+      let best = -1, bc = null;
+      for (let j = i + 3; j < n; j++) {
+        const c = circle3(pts[i], pts[(i + j) >> 1], pts[j]);
+        if (!c || c[2] > 2000) break;
+        let ok = true, sgn = 0;
+        for (let k = i; k <= j && ok; k++) if (Math.abs(Math.hypot(pts[k][0] - c[0], pts[k][1] - c[1]) - c[2]) > tol) ok = false;
+        for (let k = i; k < j && ok; k++) {
+          const a = segAng(c, pts[k], pts[k + 1]), sg = Math.sign(a);
+          if (!sg || (sgn && sg !== sgn) || Math.abs(a) > MAXSEG) ok = false;
+          sgn = sg;
+        }
+        if (!ok) break;
+        best = j; bc = { c, ccw: sgn > 0 };
+      }
+      if (best < 0) { out.push({ type: 'line', to: pts[i + 1] }); i++; continue; }
+      // découpe en arcs de 180° au plus
+      let k0 = i, sweep = 0;
+      for (let k = i; k < best; k++) {
+        const a = Math.abs(segAng(bc.c, pts[k], pts[k + 1]));
+        if (sweep + a > MAXARC + 1e-9) { out.push({ type: 'arc', from: pts[k0], to: pts[k], c: bc.c, ccw: bc.ccw }); k0 = k; sweep = 0; }
+        sweep += a;
+      }
+      out.push({ type: 'arc', from: pts[k0], to: pts[best], c: bc.c, ccw: bc.ccw });
+      i = best;
+    }
+    return out;
+  }
+
+  function generateGcode(paths, o, info) {
+    info = info || {};
+    info.arcs = 0;
+    const L = [];
+    let n = 10;
+    const N = s => { L.push('N' + n + ' ' + s); n += 10; };
+    L.push('% ' + o.program);
+    L.push('');
+    N('( ' + o.name + ' )');
+    N('T' + o.tool + ' D' + o.tool + ' M6');
+    N('S' + fmt(o.spindle) + ' M3');
+    const depths = depthList(o.depth, o.step);
+    const zs = o.zShift || 0;
+    paths.forEach((p, k) => {
+      const s = p[0];
+      if (k === 0) { N('G0 X' + fmt(s[0]) + ' Y' + fmt(s[1])); N('G0 Z' + fmt(o.safeZ + zs)); }
+      else { N('G0 Z' + fmt(o.safeZ + zs)); N('G0 X' + fmt(s[0]) + ' Y' + fmt(s[1])); }
+      depths.forEach((z, i) => {
+        N('G1 Z' + fmt(zs - z) + (k === 0 && i === 0 ? ' F' + fmt(o.feed) : ''));
+        L.push('');
+        const seq = p.concat([p[0]]);
+        const moves = (o.arcs === 'R' || o.arcs === 'IJ') ? fitArcs(seq, o.arcTol) : seq.slice(1).map(q => ({ type: 'line', to: q }));
+        for (const m of moves) {
+          const q = m.to;
+          if (m.type === 'line') { N('G1 X' + fmt(q[0]) + ' Y' + fmt(q[1])); continue; }
+          info.arcs++;
+          const g = m.ccw ? 'G3' : 'G2';
+          if (o.arcs === 'IJ') N(g + ' X' + fmt(q[0]) + ' Y' + fmt(q[1]) + ' I' + fmt(m.c[0] - m.from[0]) + ' J' + fmt(m.c[1] - m.from[1]));
+          else N(g + ' X' + fmt(q[0]) + ' Y' + fmt(q[1]) + ' R' + fmt(m.c[2]));
+        }
+      });
+    });
+    N('G1 Z' + fmt(o.retractZ + zs));
+    N('M2');
+    return L.join('\n') + '\n';
+  }
+
+  const api = { setLang, fmt, num, dist, signedArea, bbox, clean, offsetPolygon, pointInPoly, selfIntersects, rdpClosed, snapPoly, joinChains, dedupeLoops,
+    parseInput, parseGcode, contoursToText, parseDXF, parsePathD, traceImage, calibration, buildJob, generateGcode, originOffset, fitArcs, depthList, perimeter };
+  root.SlicerCore = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const C = window.SlicerCore;
+  const $ = id => document.getElementById(id);
+  const VERSION = '0.1.0';
+
+  /* ---------- stockage local (peut être indisponible) ---------- */
+  const store = {
+    get(k) { try { return localStorage.getItem('mini-slicer:' + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('mini-slicer:' + k, v); } catch (e) { /* stockage indisponible */ } },
+    del(k) { try { localStorage.removeItem('mini-slicer:' + k); } catch (e) { /* idem */ } }
+  };
+
+  /* ---------- langue ---------- */
+  const DEFAULT_LANG = 'auto';
+  let LANG = 'fr';
+  const tr = (fr, en) => (LANG === 'en' ? en : fr);
+  // textes fixes : clé -> [français, anglais]
+  const I18N = {
+    beta: ['bêta V0.1', 'beta V0.1'],
+    helpTitle: ['Mode d’emploi', 'How it works'], themeTitle: ['Thème clair / sombre', 'Light / dark theme'],
+    hSrc: ['Plan de la pièce', 'Part drawing'], srcTabs: ['Source du plan', 'Drawing source'], tabInput: ['Saisie', 'Input'], tabImage: ['Image', 'Image'],
+    examples: ['Exemples', 'Examples'], exP11: ['Pièce 11 : créneaux (lignes droites)', 'Part 11: slots (straight lines)'],
+    exPlate: ['Plaque à congés : arcs, trous, lumière', 'Filleted plate: arcs, holes, slot'], load: ['Charger', 'Load'],
+    ptsLabel: ['Points du contour en mm, un par ligne : X Y', 'Contour points in mm, one per line: X Y'],
+    ptsHint: ['Ligne vide ou ligne <code>#</code> = nouveau contour ; un contour à l’intérieur d’un autre devient un trou. <code>@dx dy</code> = déplacement relatif. Virgule décimale acceptée. Vous pouvez aussi coller un Gcode existant.',
+      'A blank line or a <code>#</code> line starts a new contour; a contour inside another one becomes a hole. <code>@dx dy</code> = relative move. Decimal comma accepted. You can also paste existing G-code.'],
+    clickAdd: ['Ajouter des points en cliquant sur le plan', 'Add points by clicking on the drawing'],
+    newContour: ['Nouveau contour', 'New contour'], undo: ['Retirer le dernier point', 'Remove last point'], clear: ['Vider', 'Clear'],
+    vecLabel: ['Fichier DXF (Fusion 360 : clic droit sur l’esquisse → Enregistrer au format DXF) ou SVG', 'DXF file (Fusion 360: right-click the sketch → Save as DXF) or SVG'],
+    chooseFile: ['Choisir un fichier', 'Choose a file'], chooseImage: ['Choisir une image', 'Choose an image'], dropHint: ['ou glissez-le ici', 'or drop it here'],
+    dxfUnits: ['Unités DXF', 'DXF units'], fromFile: ['Lues dans le fichier', 'Read from file'], inches: ['pouces', 'inches'], svgScale: ['SVG : mm par unité', 'SVG: mm per unit'],
+    vecInfo: ['Seuls les contours fermés sont gardés. Les points importés arrivent dans l’onglet Saisie, où vous pouvez les corriger.', 'Only closed contours are kept. Imported points land in the Input tab, where you can correct them.'],
+    imgLabel: ['Image du plan (photo, capture, croquis coté)', 'Drawing image (photo, screenshot, dimensioned sketch)'],
+    calHint: ['Calage : cliquez sur deux points dont vous connaissez la position en mm (par exemple deux croisements de la grille), puis indiquez leurs coordonnées.', 'Calibration: click two points whose position in mm you know (for example two grid crossings), then enter their coordinates.'],
+    nextClick: ['Prochain clic place :', 'Next click places:'], calCanvas: ['Image à caler', 'Image to calibrate'], imgMode: ['Type de dessin', 'Drawing type'],
+    modeLine: ['Trait fermé (croquis)', 'Closed line (sketch)'], modeSolid: ['Forme pleine sombre (avec trous)', 'Solid dark shape (with holes)'],
+    threshold: ['Seuil de noir', 'Black threshold'], trace: ['Détecter le contour', 'Detect contour'], showImg: ['Image sous le plan', 'Image under the drawing'],
+    imgInfo: ['Après détection, vérifiez les points dans l’onglet Saisie : la détection arrondit au pas d’accrochage.', 'After detection, check the points in the Input tab: detection rounds to the snap step.'],
+    hInterp: ['Lecture du plan', 'Reading the drawing'], interpGroup: ['Ce que représente le plan', 'What the drawing represents'],
+    interpPiece: ['Contour de la pièce', 'Part outline'],
+    interpPieceHint: ['La fraise passe à côté du trait, décalée d’un rayon : vers l’extérieur pour le contour, vers l’intérieur pour un trou.', 'The cutter runs beside the line, offset by one radius: outwards for the outline, inwards for a hole.'],
+    interpPath: ['Trajectoire de la fraise', 'Cutter path'],
+    interpPathHint: ['Les points sont déjà le centre de la fraise, comme sur le croquis de la pièce 11.', 'The points already are the cutter centre, as on the part 11 sketch.'],
+    snap: ['Pas d’accrochage des clics et de l’image (mm)', 'Snap step for clicks and image (mm)'],
+    hStock: ['Brut et origine', 'Stock and origin'], stW: ['Brut X (mm)', 'Stock X (mm)'], stH: ['Brut Y (mm)', 'Stock Y (mm)'], stT: ['Épaisseur (mm)', 'Thickness (mm)'],
+    placeGroup: ['Position de la pièce dans le brut', 'Part position in the stock'], placeCorner: ['Coin bas-gauche de la pièce à', 'Part’s bottom-left corner at'],
+    placeCornerEnd: ['mm du coin bas-gauche du brut', 'mm from the stock’s bottom-left corner'], placeCenter: ['Centrée dans le brut', 'Centred in the stock'],
+    placeKeep: ['Garder les coordonnées du plan', 'Keep the drawing coordinates'], orgXY: ['Origine programme X0 Y0', 'Program origin X0 Y0'],
+    oSBL: ['Coin bas-gauche du brut', 'Stock bottom-left corner'], oSBR: ['Coin bas-droit du brut', 'Stock bottom-right corner'], oSTL: ['Coin haut-gauche du brut', 'Stock top-left corner'],
+    oSTR: ['Coin haut-droit du brut', 'Stock top-right corner'], oSC: ['Centre du brut', 'Stock centre'], oPBL: ['Coin bas-gauche de la pièce', 'Part bottom-left corner'], oPC: ['Centre de la pièce', 'Part centre'],
+    orgZ: ['Origine Z0', 'Z0 origin'], zTop: ['Dessus du brut', 'Top of stock'], zBottom: ['Dessous du brut (table)', 'Bottom of stock (table)'],
+    hMach: ['Machine et coupe', 'Machine and cutting'], reset: ['Réglages par défaut', 'Default settings'],
+    toolD: ['Fraise Ø (mm)', 'Cutter Ø (mm)'], depth: ['Profondeur (mm)', 'Depth (mm)'], step: ['Passe max (mm)', 'Max step-down (mm)'],
+    spindle: ['Broche S (tr/min)', 'Spindle S (rpm)'], feed: ['Avance F (mm/min)', 'Feed F (mm/min)'], toolNo: ['Outil T / D', 'Tool T / D'],
+    safeZ: ['Z approche', 'Approach Z'], retZ: ['Z fin', 'End Z'], dir: ['Sens', 'Direction'], cw: ['Horaire', 'Clockwise'], ccw: ['Anti-horaire', 'Counter-clockwise'],
+    arcs: ['Arcs de cercle', 'Circular arcs'], arcR: ['G2/G3 avec R', 'G2/G3 with R'], arcIJ: ['G2/G3 avec I J', 'G2/G3 with I J'], arcNone: ['Segments G1 seulement', 'G1 segments only'],
+    arcTol: ['Tolérance des arcs (mm)', 'Arc tolerance (mm)'], prog: ['N° de programme (%)', 'Program no. (%)'], pname: ['Nom (commentaire)', 'Name (comment)'],
+    hView: ['Vérifier', 'Check'], viewTabs: ['Vue', 'View'], tabPlan: ['Plan et trajectoire', 'Drawing and path'], tabSim: ['Simulation 3D', '3D simulation'],
+    planAria: ['Plan du brut, de la pièce et de la trajectoire', 'Drawing of the stock, the part and the cutter path'],
+    lgStock: ['Brut', 'Stock'], lgPart: ['Pièce', 'Part'], lgSweep: ['Passage de la fraise', 'Cutter sweep'], lgCentre: ['Centre de la fraise et sens', 'Cutter centre and direction'], lgRapid: ['Déplacement rapide G0', 'Rapid move G0'],
+    noSim: ['La vue 3D a besoin d’une connexion internet au premier chargement (bibliothèque three.js).', 'The 3D view needs an internet connection on first load (three.js library).'],
+    play: ['Lecture', 'Play'], pause: ['Pause', 'Pause'], restart: ['Recommencer', 'Restart'], toEnd: ['Aller à la fin', 'Go to end'], speed: ['Vitesse', 'Speed'], speed1: ['×1 (réel)', '×1 (real time)'],
+    topView: ['Vue de dessus', 'Top view'], view3d: ['Vue 3D', '3D view'], progress: ['Avancement', 'Progress'],
+    simHint: ['Glisser : tourner · clic droit ou Maj + glisser : déplacer · molette : zoom. Cliquez une ligne du Gcode pour y aller.', 'Drag: rotate · right-click or Shift + drag: pan · wheel: zoom. Click a G-code line to jump to it.'],
+    simOther: ['Simuler un autre Gcode', 'Simulate another G-code'], pasteGcode: ['Ou collez un Gcode ici', 'Or paste G-code here'], simThis: ['Simuler ce Gcode', 'Simulate this G-code'], simBack: ['Revenir au Gcode généré', 'Back to generated G-code'],
+    copy: ['Copier', 'Copy'], download: ['Télécharger .txt', 'Download .txt'], gcodeAria: ['Lignes du Gcode', 'G-code lines'],
+    safety: ['Relisez le Gcode et regardez la simulation avant d’usiner. Brut bien bridé, carter fermé, et demandez à un encadrant en cas de doute.', 'Read the G-code and watch the simulation before machining. Clamp the stock firmly, close the guard, and ask a supervisor if in doubt.'],
+    keyTitle: ['Code couleur des lignes', 'Line colour code'],
+    keyCm: ['Début de programme et commentaires, ignorés par la machine', 'Program start and comments, ignored by the machine'],
+    keyMc: ['Réglages machine : outil (T D M6), broche (S M3), fin (M2)', 'Machine set-up: tool (T D M6), spindle (S M3), end (M2)'],
+    keyG0: ['Déplacement rapide, fraise hors de la matière', 'Rapid move, cutter out of the material'],
+    keyZ: ['Descente dans la matière ou remontée, à l’avance F', 'Plunge into the material or retract, at feed F'],
+    keyG1: ['Coupe en ligne droite', 'Straight cut'], keyArc: ['Coupe en arc : G2 horaire, G3 anti-horaire', 'Arc cut: G2 clockwise, G3 counter-clockwise'],
+    keyCur: ['Ligne en cours dans la simulation (cliquez une ligne pour y aller)', 'Current line in the simulation (click a line to jump to it)'],
+    help1t: ['Décrire la pièce', 'Describe the part'],
+    help1: ['Saisissez les points, importez un DXF ou SVG (Fusion 360 : clic droit sur l’esquisse, Enregistrer au format DXF), ou calez une photo du plan sur deux points connus.', 'Type the points, import a DXF or SVG (Fusion 360: right-click the sketch, Save as DXF), or calibrate a photo of the drawing on two known points.'],
+    help2t: ['Dire ce que représente le plan', 'Say what the drawing represents'],
+    help2: ['Le contour de la pièce (la fraise est décalée d’un rayon) ou directement la trajectoire du centre de la fraise.', 'The part outline (the cutter is offset by one radius) or directly the path of the cutter centre.'],
+    help3t: ['Régler le brut et la coupe', 'Set the stock and the cut'],
+    help3: ['Dimensions du brut, place de la pièce, origine X0 Y0 Z0, fraise, profondeur, passes et vitesses.', 'Stock size, part position, X0 Y0 Z0 origin, cutter, depth, step-downs and speeds.'],
+    help4t: ['Vérifier puis usiner', 'Check, then machine'],
+    help4: ['Contrôlez le plan et la simulation 3D, puis copiez ou téléchargez le Gcode pour la machine.', 'Check the drawing and the 3D simulation, then copy or download the G-code for the machine.'],
+    helpLimits: ['Limites de la bêta : détourage de contours uniquement (pas de poche ni de gravure), pas d’attaches pour tenir la pièce, une seule fraise. Les réglages restent enregistrés dans ce navigateur.', 'Beta limits: contour cutting only (no pockets or engraving), no holding tabs, a single cutter. Settings are saved in this browser.'],
+    privacy: ['Tout est calculé dans votre navigateur : aucun fichier n’est envoyé.', 'Everything is computed in your browser: no file is uploaded.']
+  };
+  const t = k => { const e = I18N[k]; if (!e) { console.warn('i18n : clé manquante ' + k); return k; } return e[LANG === 'en' ? 1 : 0]; };
+  const infoFns = {}; // textes d'aide dynamiques, recalculés au changement de langue
+  function setInfo(id, fn) { infoFns[id] = fn; $(id).textContent = fn(); }
+  function applyLang() {
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+    document.querySelectorAll('[data-i18n-title]').forEach(el => el.setAttribute('title', t(el.dataset.i18nTitle)));
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => el.setAttribute('placeholder', t(el.dataset.i18nPh)));
+    Object.keys(infoFns).forEach(id => { $(id).textContent = infoFns[id](); });
+    ['fileVec', 'fileImg', 'fileGcode'].forEach(id => { if (!$(id + 'Name').classList.contains('set')) $(id + 'Name').textContent = t('dropHint'); });
+    document.documentElement.lang = LANG;
+  }
+  function setLang(l, save) {
+    LANG = l === 'en' ? 'en' : 'fr';
+    C.setLang(LANG);
+    $('langFr').setAttribute('aria-pressed', String(LANG === 'fr'));
+    $('langEn').setAttribute('aria-pressed', String(LANG === 'en'));
+    if (save) store.set('lang', LANG);
+    applyLang();
+  }
+
+  /* ---------- thème ---------- */
+  const mq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : { matches: false, addEventListener() {} };
+  function applyTheme() {
+    const saved = store.get('theme');
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved); else document.documentElement.removeAttribute('data-theme');
+    const dark = saved ? saved === 'dark' : mq.matches;
+    document.documentElement.setAttribute('data-dark', dark ? '1' : '0');
+    if (typeof Sim !== 'undefined') Sim.retheme();
+  }
+  $('themeBtn').addEventListener('click', () => {
+    store.set('theme', document.documentElement.getAttribute('data-dark') === '1' ? 'light' : 'dark');
+    applyTheme();
+  });
+  if (mq.addEventListener) mq.addEventListener('change', () => { if (!store.get('theme')) applyTheme(); });
+
+  /* ---------- exemples ---------- */
+  const f3 = x => C.fmt(Math.round(x * 1000) / 1000);
+  function arc(cx, cy, r, a0, a1, out) {
+    const n = Math.max(1, Math.round(Math.abs(a1 - a0) / 5));
+    for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; out.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+    return out;
+  }
+  const ptsText = p => p.map(q => f3(q[0]) + ' ' + f3(q[1])).join('\n');
+  const EXAMPLES = {
+    p11: {
+      name: 'piece 11', x0: 10, y0: 10,
+      text: L => (L === 'en' ? '# Part 11: part outline (mm, origin = bottom-left corner of the stock)\n' : '# Pièce 11 : contour de la pièce (mm, origine = coin bas-gauche du brut)\n') +
+        '10 10\n10 37\n14.5 37\n14.5 32\n20.5 32\n20.5 48\n14.5 48\n14.5 43\n10 43\n10 70\n37.5 70\n37.5 75\n32.5 75\n32.5 80\n47.5 80\n47.5 75\n42.5 75\n42.5 70\n70 70\n' +
+        '70 42.5\n75 42.5\n75 47.5\n80 47.5\n80 32.5\n75 32.5\n75 37.5\n70 37.5\n70 10\n40.5 10\n40.5 14.5\n45.5 14.5\n45.5 20.5\n29.5 20.5\n29.5 14.5\n34.5 14.5\n34.5 10\n'
+    },
+    plaque: {
+      name: 'plaque', x0: 8, y0: 8,
+      text: L => {
+        const en = L === 'en';
+        // plaque 64 × 64 : congés R6, échancrure R8 en haut, encoche à droite ; 4 trous Ø6, une lumière 20 × 8, un hexagone
+        const outer = [];
+        arc(6, 6, 6, 180, 270, outer); arc(58, 6, 6, 270, 360, outer);
+        outer.push([64, 27], [58, 27], [58, 37], [64, 37]);
+        arc(58, 58, 6, 0, 90, outer); arc(32, 64, 8, 0, -180, outer); arc(6, 58, 6, 90, 180, outer);
+        const hole = (x, y) => arc(x, y, 3, 0, 355, []);
+        const slot = arc(42, 32, 4, -90, 90, []); arc(22, 32, 4, 90, 270, slot);
+        const hex = []; for (let i = 0; i < 6; i++) { const a = (90 + 60 * i) * Math.PI / 180; hex.push([32 + 6 * Math.cos(a), 16 + 6 * Math.sin(a)]); }
+        const parts = [
+          [en ? '# Filleted plate 64 × 64 mm (part outline, coordinates of the drawing)\n# Outline: R6 fillets, R8 bite on top, 10 × 6 notch on the right' : '# Plaque à congés 64 × 64 mm (contour de la pièce, coordonnées du plan)\n# Contour : congés R6, échancrure R8 en haut, encoche 10 × 6 à droite', outer],
+          [en ? '# Ø6 holes' : '# Trous Ø6', hole(10, 10)], ['#', hole(54, 10)], ['#', hole(10, 54)], ['#', hole(54, 54)],
+          [en ? '# Slot 28 × 8 (R4 ends)' : '# Lumière 28 × 8 (bouts R4)', slot],
+          [en ? '# Hexagonal hole, 12 mm across corners' : '# Trou hexagonal, 12 mm entre sommets', hex]
+        ];
+        return parts.map(p => p[0] + '\n' + ptsText(p[1])).join('\n\n') + '\n';
+      }
+    }
+  };
+  function loadExample(key) {
+    const ex = EXAMPLES[key] || EXAMPLES.p11;
+    $('exSel').value = key;
+    $('pts').value = ex.text(LANG);
+    document.querySelector('input[name="interp"][value="piece"]').checked = true;
+    document.querySelector('input[name="place"][value="corner"]').checked = true;
+    $('x0').value = ex.x0; $('y0').value = ex.y0; $('pname').value = ex.name;
+    $('showImg').checked = false; // l'image calée ne correspond plus à l'exemple
+    recompute();
+  }
+
+  const S = { job: null, img: null, imgData: null, simSource: 'gen', vecText: null, vecName: '' };
+
+  /* ---------- onglets ---------- */
+  function tabs(ids, onChange) {
+    ids.forEach(id => $('tab-' + id).addEventListener('click', () => {
+      ids.forEach(o => { $('tab-' + o).setAttribute('aria-selected', String(o === id)); $('pane-' + o).hidden = o !== id; });
+      if (onChange) onChange(id);
+    }));
+  }
+  tabs(['saisie', 'fichier', 'image']);
+  tabs(['plan', 'sim'], id => { if (id === 'sim') Sim.show(); });
+
+  /* ---------- réglages : lecture, contrôle, mémorisation ---------- */
+  const v = id => parseFloat(String($(id).value).replace(',', '.'));
+  const radio = n => document.querySelector('input[name="' + n + '"]:checked').value;
+  const SETTINGS = ['snap', 'stW', 'stH', 'stT', 'x0', 'y0', 'orgXY', 'orgZ', 'toolD', 'depth', 'step', 'spindle', 'feed', 'toolNo', 'safeZ', 'retZ', 'dir', 'arcs', 'arcTol', 'prog', 'pname'];
+  const RADIOS = ['interp', 'place'];
+  const DEFAULTS = {};
+  SETTINGS.forEach(id => { DEFAULTS[id] = $(id).value; });
+  RADIOS.forEach(n => { DEFAULTS['@' + n] = radio(n); });
+  function saveSettings() {
+    const o = {}; SETTINGS.forEach(id => { o[id] = $(id).value; }); RADIOS.forEach(n => { o['@' + n] = radio(n); });
+    store.set('settings', JSON.stringify(o));
+  }
+  function applySettings(o) {
+    SETTINGS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; });
+    RADIOS.forEach(n => { const r = o['@' + n] && document.querySelector('input[name="' + n + '"][value="' + o['@' + n] + '"]'); if (r) r.checked = true; });
+  }
+  // champs numériques : [id, minimum, strict]
+  const CHECKS = [['stW', 0, true], ['stH', 0, true], ['stT', 0, true], ['toolD', 0, true], ['depth', 0, true], ['step', 0, true], ['feed', 0, true], ['spindle', 0, false], ['arcTol', 0, true], ['snap', 0, false]];
+  function validate() {
+    const bad = [];
+    CHECKS.forEach(([id, min, strict]) => {
+      const x = v(id), ok = isFinite(x) && (strict ? x > min : x >= min);
+      $(id).setAttribute('aria-invalid', String(!ok));
+      if (!ok) bad.push(document.querySelector('label[for="' + id + '"] [data-i18n]').textContent);
+    });
+    ['x0', 'y0', 'safeZ', 'retZ'].forEach(id => { const ok = isFinite(v(id)); $(id).setAttribute('aria-invalid', String(!ok)); if (!ok) bad.push(id); });
+    const ws = [];
+    if (bad.length) ws.push({ level: 'error', msg: tr('Valeur invalide, valeur par défaut utilisée : ', 'Invalid value, default used: ') + bad.join(', ') + '.' });
+    if (isFinite(v('safeZ')) && v('safeZ') <= 0) ws.push({ level: 'warn', msg: tr('Le Z d’approche est sous le dessus du brut : la fraise toucherait la matière en rapide.', 'The approach Z is below the top of the stock: the cutter would hit the material at rapid speed.') });
+    if (isFinite(v('retZ')) && isFinite(v('safeZ')) && v('retZ') < v('safeZ')) ws.push({ level: 'warn', msg: tr('Le Z de fin est plus bas que le Z d’approche.', 'The end Z is lower than the approach Z.') });
+    return ws;
+  }
+  const pos = (id, d) => { const x = v(id); return isFinite(x) && x > 0 ? x : d; };
+  const fin = (id, d) => { const x = v(id); return isFinite(x) ? x : d; };
+  function opts() {
+    return {
+      toolDiameter: pos('toolD', 2), interp: radio('interp'),
+      placement: { mode: radio('place'), x0: fin('x0', 0), y0: fin('y0', 0) },
+      origin: { xy: $('orgXY').value, z: $('orgZ').value },
+      stock: { w: pos('stW', 80), h: pos('stH', 80), t: pos('stT', 3) },
+      depth: pos('depth', 3), step: pos('step', 1), direction: $('dir').value,
+      program: $('prog').value || 1, name: $('pname').value.trim() || 'piece', tool: $('toolNo').value || 1,
+      arcs: $('arcs').value, arcTol: pos('arcTol', 0.01),
+      spindle: Math.max(0, fin('spindle', 0)), feed: pos('feed', 150), safeZ: fin('safeZ', 3), retractZ: fin('retZ', 20)
+    };
+  }
+
+  /* ---------- calcul ---------- */
+  let timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(recompute, 120); }
+  function recompute() {
+    const checks = validate();
+    const o = opts();
+    store.set('pts', $('pts').value); saveSettings();
+    const parsed = C.parseInput($('pts').value);
+    const job = C.buildJob(parsed.contours, o);
+    job.warnings = checks.concat(parsed.warnings, job.warnings);
+    S.job = job; S.opts = o;
+    renderStats(job); renderMsgs(job.warnings); renderPlan(job, o);
+    const org = job.origin;
+    setInfo('orgInfo', () => org ? tr(
+      'Origine X0 Y0 au point X' + C.fmt(org.ox) + ' Y' + C.fmt(org.oy) + ' du brut (repère rouge et vert sur le plan). Z0 ' + (org.z === 'bottom' ? 'sous le brut : la coupe descend de Z' + C.fmt(o.stock.t) + ' à Z' + C.fmt(o.stock.t - o.depth) : 'sur le dessus du brut : la coupe descend de Z0 à Z' + C.fmt(-o.depth)) + '. Approche et fin restent mesurées depuis le dessus du brut.',
+      'Origin X0 Y0 at stock point X' + C.fmt(org.ox) + ' Y' + C.fmt(org.oy) + ' (red and green marker on the drawing). Z0 ' + (org.z === 'bottom' ? 'under the stock: cutting goes down from Z' + C.fmt(o.stock.t) + ' to Z' + C.fmt(o.stock.t - o.depth) : 'on top of the stock: cutting goes down from Z0 to Z' + C.fmt(-o.depth)) + '. Approach and end heights are measured from the top of the stock.')
+      : tr('Le point d’origine est marqué sur le plan.', 'The origin point is marked on the drawing.'));
+    if (S.simSource === 'gen') { setGcodeView(job.gcode, tr('généré', 'generated')); Sim.load(job.gcode, org); }
+    else Sim.setStock();
+  }
+  function renderStats(job) {
+    const st = job.stats;
+    const cells = st ? [
+      [String(st.contours) + (st.holes ? tr(' dont ', ' incl. ') + st.holes + tr(' trou', ' hole') + (st.holes > 1 ? 's' : '') : ''), 'Contours'],
+      [C.fmt(Math.round(st.perimeter * 10) / 10) + ' mm', tr('Longueur par passe', 'Length per pass')],
+      [st.passes + ' × ' + C.fmt(S.opts.step) + ' mm', tr('Passes en Z', 'Z passes')],
+      [fmtMin(st.minutes), tr('Temps de coupe estimé', 'Estimated cutting time')]
+    ] : [['—', 'Contours'], ['—', tr('Longueur', 'Length')], ['—', 'Passes'], ['—', tr('Temps', 'Time')]];
+    $('stats').innerHTML = cells.map(c => '<div class="stat"><b>' + esc(c[0]) + '</b><span>' + esc(c[1]) + '</span></div>').join('');
+  }
+  function fmtMin(m) { const s = Math.round(m * 60); return Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s'; }
+  function renderMsgs(ws) {
+    const lab = { error: tr('Erreur', 'Error'), warn: tr('Attention', 'Warning'), info: 'Info', ok: 'OK' };
+    const list = ws.length ? ws : [{ level: 'ok', msg: tr('Trajectoire valide : rien à signaler.', 'Valid cutter path: nothing to report.') }];
+    $('msgs').innerHTML = list.map(w => '<li><span class="chip ' + w.level + '">' + lab[w.level] + '</span><span>' + esc(w.msg) + '</span></li>').join('');
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  /* ---------- plan 2D (SVG, Y vers le haut) ---------- */
+  function renderPlan(job, o) {
+    const svg = $('plan');
+    const W = o.stock.w, H = o.stock.h, m = 8;
+    let bb = { x0: 0, y0: 0, x1: W, y1: H };
+    if (job.paths.length) { const b = C.bbox(job.paths.map(p => p.pts)); bb = { x0: Math.min(0, b.x0), y0: Math.min(0, b.y0), x1: Math.max(W, b.x1), y1: Math.max(H, b.y1) }; }
+    const vx = bb.x0 - m, vy = -(bb.y1 + m), vw = bb.x1 - bb.x0 + 2 * m, vh = bb.y1 - bb.y0 + 2 * m;
+    const sz = Math.max(vw, vh);
+    svg.setAttribute('viewBox', [vx - (sz - vw) / 2, vy - (sz - vh) / 2, sz, sz].join(' '));
+    const P = p => p.map(q => q[0].toFixed(3) + ',' + (-q[1]).toFixed(3)).join(' ');
+    let h = '';
+    let g = '';
+    for (let x = Math.floor(bb.x0 / 10) * 10 - 10; x <= bb.x1 + 10; x += 10) g += 'M' + x + ' ' + (-(bb.y1 + m)) + 'V' + (-(bb.y0 - m));
+    for (let y = Math.floor(bb.y0 / 10) * 10 - 10; y <= bb.y1 + 10; y += 10) g += 'M' + (bb.x0 - m) + ' ' + (-y) + 'H' + (bb.x1 + m);
+    h += '<path d="' + g + '" stroke="var(--grid)" stroke-width="0.15" fill="none"/>';
+    if (S.img && $('showImg').checked && calib()) {
+      const c = calib(), tl = c.toMM(0, 0), br = c.toMM(S.img.naturalWidth, S.img.naturalHeight);
+      h += '<image href="' + S.img.src + '" x="' + Math.min(tl[0], br[0]) + '" y="' + (-Math.max(tl[1], br[1])) + '" width="' + Math.abs(br[0] - tl[0]) + '" height="' + Math.abs(br[1] - tl[1]) + '" opacity="0.45" preserveAspectRatio="none"/>';
+    }
+    h += '<rect x="0" y="' + (-H) + '" width="' + W + '" height="' + H + '" fill="var(--wood)" fill-opacity="0.55" stroke="var(--wood-dark)" stroke-width="0.4"/>';
+    if (job.pieces.length) {
+      const d = job.pieces.map(p => 'M' + P(p.pts) + 'Z').join(' ');
+      h += '<path d="' + d + '" fill="var(--wood-dark)" fill-opacity="0.55" fill-rule="evenodd" stroke="var(--ink)" stroke-width="0.25"/>';
+    }
+    const r = o.toolDiameter / 2;
+    job.paths.forEach(p => {
+      h += '<polygon points="' + P(p.pts) + '" fill="none" stroke="var(--cut)" stroke-opacity="0.4" stroke-width="' + (2 * r) + '" stroke-linejoin="round"/>';
+    });
+    let prev = null;
+    job.paths.forEach(p => {
+      const s = p.pts[0];
+      if (prev) h += '<line x1="' + prev[0] + '" y1="' + (-prev[1]) + '" x2="' + s[0] + '" y2="' + (-s[1]) + '" stroke="var(--rapid)" stroke-width="0.35" stroke-dasharray="1.2 0.8"/>';
+      prev = s;
+    });
+    job.paths.forEach(p => {
+      h += '<polygon points="' + P(p.pts) + '" fill="none" stroke="var(--accent)" stroke-width="0.3"/>';
+      for (let i = 0; i < p.pts.length; i++) {
+        const a = p.pts[i], b = p.pts[(i + 1) % p.pts.length], L = C.dist(a, b);
+        if (L < 4) continue;
+        const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, s = 1.1;
+        const t1 = [mx + ux * s, my + uy * s], t2 = [mx - ux * s - uy * s * .8, my - uy * s + ux * s * .8], t3 = [mx - ux * s + uy * s * .8, my - uy * s - ux * s * .8];
+        h += '<polygon points="' + P([t1, t2, t3]) + '" fill="var(--accent)"/>';
+      }
+      const s0 = p.pts[0];
+      h += '<circle cx="' + s0[0] + '" cy="' + (-s0[1]) + '" r="1.3" fill="var(--panel)" stroke="var(--accent)" stroke-width="0.5"/>';
+      h += '<text x="' + (s0[0] + 1.8) + '" y="' + (-s0[1] + 3.2) + '" font-size="2.6" fill="var(--accent)" font-family="IBM Plex Mono, monospace">X' + C.fmt(s0[0] - (job.origin ? job.origin.ox : 0)) + ' Y' + C.fmt(s0[1] - (job.origin ? job.origin.oy : 0)) + '</text>';
+    });
+    const org = job.origin || { ox: 0, oy: 0, zShift: 0 };
+    h += '<g stroke-width="0.6"><line x1="' + org.ox + '" y1="' + (-org.oy) + '" x2="' + (org.ox + 7) + '" y2="' + (-org.oy) + '" stroke="var(--bad)"/><line x1="' + org.ox + '" y1="' + (-org.oy) + '" x2="' + org.ox + '" y2="' + (-org.oy - 7) + '" stroke="var(--good)"/><circle cx="' + org.ox + '" cy="' + (-org.oy) + '" r="0.9" fill="var(--ink)"/></g>';
+    h += '<text x="' + (org.ox - 1.2) + '" y="' + (-org.oy - 1.2) + '" text-anchor="end" font-size="2.6" fill="var(--ink)" font-family="IBM Plex Mono, monospace">X0 Y0</text>';
+    h += '<text x="' + (W / 2) + '" y="' + (bb.y1 > H + 1 ? -(bb.y1) - 2 : -H - 2) + '" font-size="2.8" text-anchor="middle" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif">' + tr('Brut ', 'Stock ') + C.fmt(W) + ' × ' + C.fmt(H) + ' mm</text>';
+    svg.innerHTML = h;
+  }
+  function svgPoint(evt) {
+    const svg = $('plan'), pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return [q.x, -q.y];
+  }
+  function snapV(x) { const s = v('snap'); return s > 0 ? Math.round(x / s) * s : Math.round(x * 1000) / 1000; }
+  $('plan').addEventListener('mousemove', e => { const p = svgPoint(e); $('cursorPos').textContent = 'X ' + C.fmt(snapV(p[0])) + '  Y ' + C.fmt(snapV(p[1])); });
+  $('plan').addEventListener('click', e => {
+    if (!$('clickAdd').checked) return;
+    const p = svgPoint(e);
+    const t0 = $('pts').value.replace(/\s+$/, '');
+    // les clics sont en coordonnées du brut : on garde la saisie telle quelle pour qu'ils restent alignés
+    if (radio('place') !== 'keep' && t0.trim()) document.querySelector('input[name="place"][value="keep"]').checked = true;
+    $('pts').value = (t0 ? t0 + '\n' : '') + C.fmt(snapV(p[0])) + ' ' + C.fmt(snapV(p[1])) + '\n';
+    recompute();
+  });
+  $('clickAdd').addEventListener('change', () => $('plan').classList.toggle('adding', $('clickAdd').checked));
+  $('btnNewContour').addEventListener('click', () => { $('pts').value = $('pts').value.replace(/\s+$/, '') + '\n\n'; $('pts').focus(); });
+  $('btnUndo').addEventListener('click', () => {
+    const lines = $('pts').value.replace(/\s+$/, '').split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) if (lines[i].trim() && !lines[i].trim().startsWith('#')) { lines.splice(i, 1); break; }
+    $('pts').value = lines.join('\n') + '\n'; recompute();
+  });
+  $('btnSample').addEventListener('click', () => loadExample($('exSel').value));
+  $('btnClear').addEventListener('click', () => { $('pts').value = ''; recompute(); $('pts').focus(); });
+  $('btnReset').addEventListener('click', () => { applySettings(DEFAULTS); recompute(); });
+
+  /* ---------- Gcode : listing coloré, copie, téléchargement ---------- */
+  function lineKind(l) {
+    const s = l.replace(/^\s*N\d+\s*/i, '');
+    if (/^%|^\(/.test(s) || /^;/.test(s)) return 'cm';
+    if (/\bG0?0\b/i.test(s)) return 'g0';
+    if (/\bG0?[23]\b/i.test(s)) return 'arc';
+    if (/\bG0?1\b/i.test(s)) return /[XY]/i.test(s) ? 'g1' : 'z';
+    if (/\b[TSM]\d/i.test(s)) return 'mc';
+    if (/[XY]\s*-?[\d.]/i.test(s)) return 'g1';
+    if (/Z\s*-?[\d.]/i.test(s)) return 'z';
+    return '';
+  }
+  function setGcodeView(text, badge) {
+    $('gcodeRaw').value = text;
+    $('gcodeBadge').textContent = badge;
+    const lines = text.replace(/\n$/, '').split('\n');
+    $('gcodeView').innerHTML = lines.map((l, i) => {
+      const k = lineKind(l), m = l.match(/^(\s*N\d+\s*)(.*)$/i);
+      const body = m ? '<span class="n">' + esc(m[1]) + '</span>' + esc(m[2]) : esc(l);
+      return '<div role="listitem" data-line="' + i + '"><span class="ln">' + (i + 1) + '</span><span' + (k ? ' class="k-' + k + '"' : '') + '>' + body + '</span></div>';
+    }).join('');
+  }
+  $('gcodeView').addEventListener('click', e => { const d = e.target.closest('[data-line]'); if (d) Sim.gotoLine(+d.dataset.line); });
+  $('btnCopy').addEventListener('click', () => {
+    const txt = $('gcodeRaw').value;
+    const done = () => { $('btnCopy').textContent = tr('Copié', 'Copied'); setTimeout(() => { $('btnCopy').textContent = t('copy'); }, 1500); };
+    function fallback() { const r = document.createRange(); r.selectNodeContents($('gcodeView')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('btnCopy').textContent = tr('Sélectionné : Ctrl+C', 'Selected: Ctrl+C'); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, fallback); else fallback();
+  });
+  $('btnDownload').addEventListener('click', () => {
+    const name = (($('pname').value || 'piece').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'piece') + '.txt';
+    const url = URL.createObjectURL(new Blob([$('gcodeRaw').value.replace(/\n/g, '\r\n')], { type: 'text/plain' }));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+
+  /* ---------- sélecteurs de fichier : nom affiché et glisser-déposer ---------- */
+  ['fileVec', 'fileImg', 'fileGcode'].forEach(id => {
+    const inp = $(id), zone = inp.closest('.drop');
+    inp.addEventListener('change', () => { const f = inp.files[0]; if (f) { $(id + 'Name').textContent = f.name; $(id + 'Name').classList.add('set'); } });
+    ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, () => zone.classList.remove('over')));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+      try { inp.files = e.dataTransfer.files; } catch (err) { return; }
+      inp.dispatchEvent(new Event('change'));
+    });
+  });
+
+  /* ---------- import DXF / SVG ---------- */
+  $('fileVec').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { S.vecText = rd.result; S.vecName = f.name; importVec(); };
+    rd.readAsText(f);
+  });
+  $('vecUnit').addEventListener('change', () => S.vecText && importVec());
+  $('svgScale').addEventListener('change', () => S.vecText && importVec());
+  function importVec() {
+    let res;
+    try {
+      if (/\.svg$/i.test(S.vecName) || /^\s*<(\?xml|svg)/i.test(S.vecText)) res = importSVG(S.vecText);
+      else res = C.parseDXF(S.vecText, parseFloat($('vecUnit').value) || 0);
+    } catch (err) { setInfo('vecInfo', () => tr('Lecture impossible : ', 'Cannot read file: ') + err.message); return; }
+    if (!res.contours.length) { setInfo('vecInfo', () => tr('Aucun contour fermé trouvé dans ', 'No closed contour found in ') + S.vecName + '. ' + res.warnings.map(w => w.msg).join(' ')); return; }
+    $('pts').value = tr('# Importé de ', '# Imported from ') + S.vecName + '\n' + C.contoursToText(res.contours) + '\n';
+    setInfo('vecInfo', () => res.contours.length + tr(' contour(s) fermé(s) lu(s) dans ', ' closed contour(s) read from ') + S.vecName + (res.units ? tr(' (unités : ', ' (units: ') + res.units + ')' : '') + '. ' + res.warnings.map(w => w.msg).join(' '));
+    document.querySelector('input[name="place"][value="corner"]').checked = true;
+    recompute();
+  }
+  function importSVG(text) {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const src = doc.documentElement;
+    if (!src || src.nodeName.toLowerCase() !== 'svg') throw new Error(tr('fichier SVG invalide', 'invalid SVG file'));
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden';
+    const root = document.importNode(src, true);
+    host.appendChild(root); document.body.appendChild(host);
+    const warnings = [];
+    let mmPerUnit = parseFloat($('svgScale').value);
+    if (!(mmPerUnit > 0)) {
+      const vb = (root.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+      const wAttr = root.getAttribute('width') || '';
+      const m = wAttr.match(/^([\d.]+)\s*(mm|cm|in|px|pt)?$/);
+      const toMM = { mm: 1, cm: 10, in: 25.4, px: 25.4 / 96, pt: 25.4 / 72, undefined: 25.4 / 96 };
+      if (m && vb.length === 4 && vb[2] > 0) mmPerUnit = parseFloat(m[1]) * toMM[m[2]] / vb[2];
+      else if (m) mmPerUnit = toMM[m[2]];
+      else mmPerUnit = 25.4 / 96;
+      $('svgScale').placeholder = 'auto : ' + C.fmt(mmPerUnit);
+    }
+    const rootInv = root.getScreenCTM() ? root.getScreenCTM().inverse() : null;
+    const chains = [], closed = [];
+    root.querySelectorAll('path, polygon, polyline, rect, circle, ellipse, line').forEach(el => {
+      let subs = [];
+      const n = el.nodeName.toLowerCase(), a = k => parseFloat(el.getAttribute(k)) || 0;
+      if (n === 'path') subs = C.parsePathD(el.getAttribute('d') || '');
+      else if (n === 'polygon' || n === 'polyline') {
+        const nums = (el.getAttribute('points') || '').trim().split(/[\s,]+/).map(Number), pts = [];
+        for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+        subs = [{ pts, closed: n === 'polygon' }];
+      } else if (n === 'rect') { const x = a('x'), y = a('y'), w = a('width'), h = a('height'); subs = [{ pts: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], closed: true }]; }
+      else if (n === 'circle' || n === 'ellipse') {
+        const cx = a('cx'), cy = a('cy'), rx = n === 'circle' ? a('r') : a('rx'), ry = n === 'circle' ? a('r') : a('ry'), pts = [];
+        for (let i = 0; i < 72; i++) { const th = i / 72 * Math.PI * 2; pts.push([cx + rx * Math.cos(th), cy + ry * Math.sin(th)]); }
+        subs = [{ pts, closed: true }];
+      } else if (n === 'line') subs = [{ pts: [[a('x1'), a('y1')], [a('x2'), a('y2')]], closed: false }];
+      let M = null;
+      if (rootInv && el.getScreenCTM) { const s = el.getScreenCTM(); if (s) M = rootInv.multiply(s); }
+      subs.forEach(sp => {
+        const pts = sp.pts.map(q => { const x = M ? M.a * q[0] + M.c * q[1] + M.e : q[0], y = M ? M.b * q[0] + M.d * q[1] + M.f : q[1]; return [x * mmPerUnit, -y * mmPerUnit]; });
+        if (sp.closed || (pts.length > 3 && C.dist(pts[0], pts[pts.length - 1]) < 0.01)) closed.push(pts); else chains.push(pts);
+      });
+    });
+    host.remove();
+    const j = C.joinChains(chains, 0.02);
+    if (j.open.length) warnings.push({ level: 'warn', msg: j.open.length + tr(' tracé(s) ouvert(s) ignoré(s).', ' open path(s) ignored.') });
+    const contours = C.dedupeLoops(closed.map(c => C.clean(c)).concat(j.loops)).filter(c => c.length >= 3);
+    return { contours, warnings, units: C.fmt(mmPerUnit) + tr(' mm par unité SVG', ' mm per SVG unit') };
+  }
+
+  /* ---------- image : calage et détection ---------- */
+  function calib() {
+    const A = { px: v('aPx'), py: v('aPy'), X: v('aX'), Y: v('aY') }, B = { px: v('bPx'), py: v('bPy'), X: v('bX'), Y: v('bY') };
+    if (![A.px, A.py, A.X, A.Y, B.px, B.py, B.X, B.Y].every(isFinite)) return null;
+    return C.calibration(A, B);
+  }
+  $('fileImg').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { const im = new Image(); im.onload = () => setImage(im); im.onerror = () => setInfo('imgInfo', () => tr('Image illisible.', 'Unreadable image.')); im.src = rd.result; };
+    rd.readAsDataURL(f);
+  });
+  function setImage(im) {
+    S.img = im; S.traceLoops = null;
+    const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const ctx = c.getContext('2d'); ctx.drawImage(im, 0, 0);
+    S.imgData = ctx.getImageData(0, 0, c.width, c.height);
+    $('btnTrace').disabled = false;
+    drawCal(); recompute();
+  }
+  function drawCal() {
+    const cv = $('calCanvas'), z = parseFloat($('calZoom').value);
+    if (!S.img) return;
+    cv.width = Math.round(S.img.naturalWidth * z); cv.height = Math.round(S.img.naturalHeight * z);
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = z < 1;
+    ctx.drawImage(S.img, 0, 0, cv.width, cv.height);
+    if (S.traceLoops) {
+      ctx.strokeStyle = '#e2622b'; ctx.lineWidth = 2;
+      S.traceLoops.forEach(l => { ctx.beginPath(); l.forEach((q, i) => i ? ctx.lineTo(q[0] * z, q[1] * z) : ctx.moveTo(q[0] * z, q[1] * z)); ctx.closePath(); ctx.stroke(); });
+    }
+    [['A', 'aPx', 'aPy'], ['B', 'bPx', 'bPy']].forEach(([n, px, py]) => {
+      const x = v(px), y = v(py); if (!isFinite(x) || !isFinite(y)) return;
+      ctx.strokeStyle = '#1d5bc2'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x * z - 9, y * z); ctx.lineTo(x * z + 9, y * z); ctx.moveTo(x * z, y * z - 9); ctx.lineTo(x * z, y * z + 9); ctx.stroke();
+      ctx.fillStyle = '#1d5bc2'; ctx.font = 'bold 14px sans-serif'; ctx.fillText(n, x * z + 6, y * z - 6);
+    });
+  }
+  $('calZoom').addEventListener('change', drawCal);
+  $('calCanvas').addEventListener('click', e => {
+    if (!S.img) return;
+    const r = $('calCanvas').getBoundingClientRect(), z = parseFloat($('calZoom').value);
+    const px = Math.round((e.clientX - r.left) / z * 2) / 2, py = Math.round((e.clientY - r.top) / z * 2) / 2;
+    const k = radio('calNext').toLowerCase();
+    $(k + 'Px').value = px; $(k + 'Py').value = py;
+    if (k === 'a') document.querySelector('input[name="calNext"][value="B"]').checked = true;
+    drawCal(); recompute();
+  });
+  ['aPx', 'aPy', 'aX', 'aY', 'bPx', 'bPy', 'bX', 'bY'].forEach(id => $(id).addEventListener('input', () => { drawCal(); schedule(); }));
+  $('imgThr').addEventListener('input', () => { $('imgThrVal').textContent = $('imgThr').value; });
+  $('btnTrace').addEventListener('click', traceNow);
+  function traceNow() {
+    const c = calib();
+    if (!S.imgData) return;
+    if (!c) { setInfo('imgInfo', () => tr('Placez d’abord les points A et B (clic sur l’image) et leurs coordonnées en mm.', 'First place points A and B (click on the image) and enter their coordinates in mm.')); return; }
+    const res = C.traceImage(S.imgData.data, S.imgData.width, S.imgData.height, { threshold: +$('imgThr').value, mode: $('imgMode').value });
+    S.traceLoops = res.loops; drawCal();
+    if (!res.loops.length) { setInfo('imgInfo', () => tr('Aucun contour fermé trouvé : ajustez le seuil ou vérifiez que le trait est bien fermé.', 'No closed contour found: adjust the threshold or check that the line is closed.')); return; }
+    const pxmm = Math.abs(c.sx);
+    let contours = res.loops.map(l => l.map(q => c.toMM(q[0], q[1])));
+    if (res.lineWidthPx > 0) contours = contours.map(p => C.offsetPolygon(p, -res.lineWidthPx / 2 * pxmm));
+    const snap = v('snap');
+    contours = contours.map(p => C.snapPoly(p, snap)).filter(p => p.length >= 3);
+    const mode = $('imgMode').value;
+    $('pts').value = tr('# Détecté sur l’image (', '# Detected on the image (') + (mode === 'trait' ? tr('axe du trait', 'line centre') : tr('forme pleine', 'solid shape')) + tr(', accroché à ', ', snapped to ') + C.fmt(snap) + ' mm)\n' + C.contoursToText(contours) + '\n';
+    const nPts = contours.reduce((s, p) => s + p.length, 0), lw = res.lineWidthPx * pxmm;
+    setInfo('imgInfo', () => contours.length + ' contour(s), ' + nPts + tr(' points. Trait mesuré : ', ' points. Measured line width: ') + C.fmt(lw) + tr(' mm. Vérifiez et corrigez dans l’onglet Saisie.', ' mm. Check and correct in the Input tab.'));
+    recompute();
+  }
+
+  /* ---------- simulation 3D ---------- */
+  const Sim = (function () {
+    const hasThree = typeof window.THREE !== 'undefined';
+    const R = { moves: [], times: [], total: 0, t: 0, playing: false, stamped: 0, lastLine: -1 };
+    let renderer, scene, camera, hm, hmGeo, tool, pathGroup, woodSide, spoilMat;
+    const cam = { theta: -Math.PI / 2.6, phi: 0.95, r: 150, target: hasThree ? new THREE.Vector3() : { set() {} } };
+    let H = null; // carte des hauteurs
+    let visible = false, dirty = true, inited = false;
+    const RAPID = 2000; // mm/min pour les G0
+    function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888'; }
+    function init() {
+      if (inited || !hasThree) return;
+      inited = true;
+      const host = $('sim3d');
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      renderer.setClearColor(new THREE.Color(css('--soft')));
+      host.appendChild(renderer.domElement);
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(40, 4 / 3, 0.5, 3000);
+      camera.up.set(0, 0, 1);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      const dl = new THREE.DirectionalLight(0xffffff, 0.75); dl.position.set(-60, -90, 160); scene.add(dl);
+      const tg = new THREE.Group();
+      const shank = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 22, 24), new THREE.MeshPhongMaterial({ color: 0xc8ced6, shininess: 80 }));
+      shank.rotation.x = Math.PI / 2; shank.position.z = 11; tg.add(shank);
+      const holder = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 18, 32), new THREE.MeshPhongMaterial({ color: 0x5b6875 }));
+      holder.rotation.x = Math.PI / 2; holder.position.z = 31; tg.add(holder);
+      tool = tg; scene.add(tool);
+      pathGroup = new THREE.Group(); scene.add(pathGroup);
+      woodSide = new THREE.MeshLambertMaterial({ color: new THREE.Color(css('--wood-dark')) });
+      spoilMat = new THREE.MeshLambertMaterial({ color: 0x7d8792 });
+      bindOrbit(renderer.domElement);
+      new ResizeObserver(resize).observe(host);
+      resize();
+      requestAnimationFrame(loop);
+    }
+    function retheme() {
+      if (!inited) return;
+      renderer.setClearColor(new THREE.Color(css('--soft')));
+      woodSide.color = new THREE.Color(css('--wood-dark'));
+      refreshMesh(); buildPathLines(); dirty = true;
+    }
+    function resize() {
+      if (!renderer) return;
+      const host = $('sim3d'), w = host.clientWidth, h = host.clientHeight || w * 0.75;
+      if (!w) return;
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); dirty = true;
+    }
+    function bindOrbit(el) {
+      let drag = null;
+      el.addEventListener('contextmenu', e => e.preventDefault());
+      el.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; el.setPointerCapture(e.pointerId); });
+      el.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+        if (drag.pan) {
+          const k = cam.r * 0.0016, right = new THREE.Vector3(), up = new THREE.Vector3();
+          camera.matrixWorld.extractBasis(right, up, new THREE.Vector3());
+          cam.target.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
+        } else { cam.theta -= dx * 0.008; cam.phi = Math.min(1.55, Math.max(0.02, cam.phi - dy * 0.008)); }
+        dirty = true;
+      });
+      el.addEventListener('pointerup', () => { drag = null; });
+      el.addEventListener('wheel', e => { e.preventDefault(); cam.r = Math.min(800, Math.max(15, cam.r * Math.pow(1.0015, e.deltaY))); dirty = true; }, { passive: false });
+    }
+    function placeCamera() {
+      const tg = cam.target;
+      camera.position.set(tg.x + cam.r * Math.sin(cam.phi) * Math.cos(cam.theta), tg.y + cam.r * Math.sin(cam.phi) * Math.sin(cam.theta), tg.z + cam.r * Math.cos(cam.phi));
+      camera.lookAt(tg);
+    }
+    function setStock() {
+      const o = S.opts || opts();
+      const W = o.stock.w, Hh = o.stock.h, T = o.stock.t;
+      const cell = Math.max(0.2, Math.min(0.5, Math.max(W, Hh) / 260));
+      const nx = Math.round(W / cell) + 1, ny = Math.round(Hh / cell) + 1;
+      const sameStock = H && H.W === W && H.H === Hh && H.T === T;
+      H = { W, H: Hh, T, cell: W / (nx - 1), cellY: Hh / (ny - 1), nx, ny, z: new Float32Array(nx * ny), r: (o.toolDiameter || 2) / 2 };
+      R.stamped = 0; R.stampPos = null; R.stampT = undefined;
+      if (!inited) return;
+      if (hm) { scene.remove(hm); hmGeo.dispose(); }
+      const posA = new Float32Array(nx * ny * 3), col = new Float32Array(nx * ny * 3), idx = new Uint32Array((nx - 1) * (ny - 1) * 6);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const k = j * nx + i; posA[3 * k] = i * H.cell; posA[3 * k + 1] = j * H.cellY; posA[3 * k + 2] = 0; }
+      let q = 0;
+      for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1; idx[q++] = a; idx[q++] = b; idx[q++] = d; idx[q++] = a; idx[q++] = d; idx[q++] = c; }
+      hmGeo = new THREE.BufferGeometry();
+      hmGeo.setAttribute('position', new THREE.BufferAttribute(posA, 3));
+      hmGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      hmGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+      hm = new THREE.Group();
+      hm.add(new THREE.Mesh(hmGeo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+      // chants du brut et planche martyre
+      const walls = [[W, 0.01, W / 2, 0], [W, 0.01, W / 2, Hh], [0.01, Hh, 0, Hh / 2], [0.01, Hh, W, Hh / 2]];
+      walls.forEach(w => { const m = new THREE.Mesh(new THREE.BoxGeometry(w[0], w[1], T), woodSide); m.position.set(w[2], w[3], -T / 2); hm.add(m); });
+      const spoil = new THREE.Mesh(new THREE.BoxGeometry(W + 30, Hh + 30, 2), spoilMat);
+      spoil.position.set(W / 2, Hh / 2, -T - 1.02); hm.add(spoil);
+      scene.add(hm);
+      if (!sameStock) { cam.target.set(W / 2, Hh / 2, -T / 2); cam.r = Math.max(W, Hh) * 1.9; }
+      tool.scale.set(H.r, H.r, 1);
+      tool.children[1].scale.set(1 / H.r, 1 / H.r, 1);
+      refreshMesh();
+      dirty = true;
+    }
+    function refreshMesh() {
+      if (!hmGeo) return;
+      const p = hmGeo.attributes.position.array, col = hmGeo.attributes.color.array;
+      const wood = new THREE.Color(css('--wood')), deep = new THREE.Color(css('--wood-dark')), thru = new THREE.Color(0x3c444d), c = new THREE.Color();
+      for (let k = 0; k < H.z.length; k++) {
+        const z = H.z[k];
+        p[3 * k + 2] = z;
+        if (z <= -H.T + 1e-3) c.copy(thru); else { c.copy(wood).lerp(deep, Math.min(1, -z / H.T) * 0.9); }
+        col[3 * k] = c.r; col[3 * k + 1] = c.g; col[3 * k + 2] = c.b;
+      }
+      hmGeo.attributes.position.needsUpdate = true; hmGeo.attributes.color.needsUpdate = true;
+      hmGeo.computeVertexNormals();
+      dirty = true;
+    }
+    function stampSeg(a, b) {
+      if (a[2] >= 0 && b[2] >= 0) return false;
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const n = Math.max(1, Math.ceil(L / (H.cell * 0.5)));
+      const r = H.r, ri = Math.ceil(r / H.cell) + 1, rj = Math.ceil(r / H.cellY) + 1;
+      let changed = false;
+      for (let s = 0; s <= n; s++) {
+        const f = s / n, x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f, z = Math.max(-H.T, a[2] + (b[2] - a[2]) * f);
+        if (z >= 0) continue;
+        const ci = Math.round(x / H.cell), cj = Math.round(y / H.cellY);
+        for (let j = cj - rj; j <= cj + rj; j++) {
+          if (j < 0 || j >= H.ny) continue;
+          for (let i = ci - ri; i <= ci + ri; i++) {
+            if (i < 0 || i >= H.nx) continue;
+            const dx = i * H.cell - x, dy = j * H.cellY - y;
+            if (dx * dx + dy * dy > r * r) continue;
+            const k = j * H.nx + i;
+            if (H.z[k] > z) { H.z[k] = z; changed = true; }
+          }
+        }
+      }
+      return changed;
+    }
+    function posAt(time) {
+      const m = R.moves; if (!m.length) return { p: [0, 0, 20], i: -1 };
+      let lo = 0, hi = m.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (R.times[mid + 1] <= time) lo = mid + 1; else hi = mid; }
+      const mv = m[lo], t0 = R.times[lo], t1 = R.times[lo + 1], f = t1 > t0 ? Math.min(1, Math.max(0, (time - t0) / (t1 - t0))) : 1;
+      return { p: [mv.from[0] + (mv.to[0] - mv.from[0]) * f, mv.from[1] + (mv.to[1] - mv.from[1]) * f, mv.from[2] + (mv.to[2] - mv.from[2]) * f], i: lo, f };
+    }
+    // enlève la matière jusqu'au temps donné (repart de zéro si on recule)
+    function advanceTo(time) {
+      if (!H) return;
+      const target = posAt(time);
+      if (R.stampT !== undefined && time < R.stampT - 1e-9) { H.z.fill(0); R.stamped = 0; R.stampT = 0; R.stampPos = null; }
+      let changed = false;
+      if (target.i >= 0) {
+        for (let k = R.stamped; k < target.i; k++) changed = stampSeg(k === R.stamped && R.stampPos ? R.stampPos : R.moves[k].from, R.moves[k].to) || changed;
+        const startPt = target.i === R.stamped && R.stampPos ? R.stampPos : R.moves[target.i].from;
+        changed = stampSeg(startPt, target.p) || changed;
+        R.stamped = target.i; R.stampPos = target.p;
+      }
+      R.stampT = time;
+      if (changed) refreshMesh();
+      if (tool) tool.position.set(target.p[0], target.p[1], target.p[2]);
+      updateDro(target);
+      dirty = true;
+    }
+    function updateDro(target) {
+      const mv = R.moves[target.i];
+      const lineIdx = mv ? mv.line : -1;
+      const sh = R.shift || [0, 0, 0];
+      $('dro').innerHTML = '<span><b>X</b> ' + (target.p[0] - sh[0]).toFixed(2) + '</span><span><b>Y</b> ' + (target.p[1] - sh[1]).toFixed(2) + '</span><span><b>Z</b> ' + (target.p[2] - sh[2]).toFixed(2) + '</span>' +
+        '<span><b>F</b> ' + (mv ? (mv.rapid ? 'G0' : (mv.feed || '—')) : '—') + '</span><span><b>' + tr('Ligne', 'Line') + '</b> ' + (lineIdx + 1) + '</span><span><b>' + tr('Temps', 'Time') + '</b> ' + clock(R.t) + ' / ' + clock(R.total) + '</span>';
+      $('simTime').value = R.total ? Math.round(R.t / R.total * 1000) : 0;
+      if (lineIdx !== R.lastLine) {
+        const old = $('gcodeView').querySelector('.cur'); if (old) old.classList.remove('cur');
+        const el = $('gcodeView').querySelector('[data-line="' + lineIdx + '"]');
+        if (el) { el.classList.add('cur'); if (R.playing) { const box = $('gcodeView'); box.scrollTop = el.offsetTop - box.clientHeight / 2; } }
+        R.lastLine = lineIdx;
+      }
+    }
+    function clock(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+    function buildPathLines() {
+      if (!inited) return;
+      while (pathGroup.children.length) { const c = pathGroup.children.pop(); c.geometry.dispose(); c.material.dispose(); }
+      const feedPts = [], rapidPts = [];
+      R.moves.forEach(m => (m.rapid ? rapidPts : feedPts).push(m.from[0], m.from[1], m.from[2] + 0.02, m.to[0], m.to[1], m.to[2] + 0.02));
+      const mk = (arr, color, dashed) => {
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+        const mat = dashed ? new THREE.LineDashedMaterial({ color, dashSize: 1.5, gapSize: 1 }) : new THREE.LineBasicMaterial({ color });
+        const l = new THREE.LineSegments(g, mat); if (dashed) l.computeLineDistances(); pathGroup.add(l);
+      };
+      if (feedPts.length) mk(feedPts, new THREE.Color(css('--accent')), false);
+      if (rapidPts.length) mk(rapidPts, new THREE.Color(css('--rapid')), true);
+    }
+    function setPlaying(p) {
+      R.playing = p;
+      $('simPlayIco').setAttribute('href', p ? '#i-pause' : '#i-play');
+      $('simPlayLbl').dataset.i18n = p ? 'pause' : 'play';
+      $('simPlayLbl').textContent = t(p ? 'pause' : 'play');
+    }
+    function load(text, org) {
+      const g = C.parseGcode(text);
+      org = org || (S.job && S.job.origin) || { ox: 0, oy: 0, zShift: 0 };
+      R.shift = [org.ox, org.oy, -org.zShift];
+      // passage du repère du Gcode au repère du brut (coin bas-gauche, Z0 = dessus)
+      const toStock = q => [q[0] + R.shift[0], q[1] + R.shift[1], q[2] + R.shift[2]];
+      R.moves = g.moves.map(m => Object.assign({}, m, { from: toStock(m.from), to: toStock(m.to) })); R.times = [0];
+      let T = 0;
+      R.moves.forEach(m => { const L = Math.hypot(m.to[0] - m.from[0], m.to[1] - m.from[1], m.to[2] - m.from[2]); T += L / (m.rapid ? RAPID : (m.feed || 150)) * 60; R.times.push(T); });
+      R.total = T; R.t = 0; R.lastLine = -1;
+      setPlaying(false);
+      S.simWarnings = g.warnings;
+      setStock(); buildPathLines();
+      advanceTo(0);
+    }
+    let lastFrame = 0;
+    function loop(ts) {
+      requestAnimationFrame(loop);
+      const dt = lastFrame ? Math.min(0.1, (ts - lastFrame) / 1000) : 0; lastFrame = ts;
+      if (R.playing && visible) {
+        R.t = Math.min(R.total, R.t + dt * parseFloat($('simSpeed').value));
+        advanceTo(R.t);
+        if (R.t >= R.total) setPlaying(false);
+      }
+      if (dirty && visible && renderer) { placeCamera(); renderer.render(scene, camera); dirty = false; }
+    }
+    function show() {
+      visible = true;
+      if (!hasThree) { $('noSim').hidden = false; return; }
+      if (!inited) { init(); setStock(); buildPathLines(); advanceTo(R.t); }
+      resize(); dirty = true;
+    }
+    $('simPlay').addEventListener('click', () => {
+      if (!R.moves.length) return;
+      if (R.t >= R.total) { R.t = 0; advanceTo(0); }
+      setPlaying(!R.playing);
+    });
+    $('simRestart').addEventListener('click', () => { R.t = 0; advanceTo(0); });
+    $('simEnd').addEventListener('click', () => { setPlaying(false); R.t = R.total; advanceTo(R.t); });
+    $('simTime').addEventListener('input', () => { R.t = $('simTime').value / 1000 * R.total; advanceTo(R.t); });
+    $('simView').addEventListener('click', () => {
+      const topV = cam.phi > 0.1;
+      cam.phi = topV ? 0.02 : 0.95; cam.theta = -Math.PI / 2;
+      $('simView').dataset.i18n = topV ? 'view3d' : 'topView'; $('simView').textContent = t($('simView').dataset.i18n); dirty = true;
+    });
+    function gotoLine(line) {
+      const k = R.moves.findIndex(m => m.line >= line);
+      if (k < 0) return;
+      R.t = R.times[k + 1]; advanceTo(R.t);
+    }
+    return { show, load, gotoLine, retheme, setStock: () => { setStock(); buildPathLines(); advanceTo(R.t); }, state: R, heights: () => H, advanceTo };
+  })();
+
+  /* ---------- simulation d'un autre Gcode ---------- */
+  $('fileGcode').addEventListener('change', e => {
+    const f = e.target.files[0]; if (!f) return;
+    const rd = new FileReader(); rd.onload = () => { $('extGcode').value = rd.result; simExt(f.name); }; rd.readAsText(f);
+  });
+  $('btnSimExt').addEventListener('click', () => simExt(null));
+  $('btnSimGen').addEventListener('click', () => { S.simSource = 'gen'; $('btnSimGen').hidden = true; recompute(); });
+  function simExt(name) {
+    const txt = $('extGcode').value; if (!txt.trim()) return;
+    S.simSource = 'ext'; S.extName = name; $('btnSimGen').hidden = false;
+    setGcodeView(txt, extBadge()); Sim.load(txt, S.job && S.job.origin);
+    renderExtMsgs();
+  }
+  const extBadge = () => tr('importé : ', 'imported: ') + (S.extName || tr('collé', 'pasted'));
+  function renderExtMsgs() {
+    renderMsgs((S.simWarnings || []).concat([{ level: 'info', msg: tr('Simulation d’un Gcode importé. Le plan n’est pas modifié.', 'Simulating imported G-code. The drawing is unchanged.') }, { level: 'info', msg: tr('Le brut est placé selon le réglage « Brut et origine » : adaptez-le à ce Gcode si besoin.', 'The stock is placed according to the “Stock and origin” settings: adjust them to this G-code if needed.') }]));
+  }
+
+  /* ---------- démarrage ---------- */
+  function onLangChange() {
+    // un exemple non modifié suit la langue
+    const cur = $('pts').value, other = LANG === 'en' ? 'fr' : 'en';
+    Object.keys(EXAMPLES).forEach(k => { if (cur === EXAMPLES[k].text(other)) $('pts').value = EXAMPLES[k].text(LANG); });
+    recompute();
+    if (S.simSource === 'ext') { $('gcodeBadge').textContent = extBadge(); renderExtMsgs(); }
+    Sim.advanceTo(Sim.state.t);
+  }
+  $('langFr').addEventListener('click', () => { setLang('fr', true); onLangChange(); });
+  $('langEn').addEventListener('click', () => { setLang('en', true); onLangChange(); });
+  setInfo('vecInfo', () => t('vecInfo'));
+  setInfo('imgInfo', () => t('imgInfo'));
+  (function initLang() {
+    let l = store.get('lang');
+    if (!l) l = DEFAULT_LANG !== 'auto' ? DEFAULT_LANG : ((navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en');
+    setLang(l, false);
+  })();
+  applyTheme();
+  try { const s = JSON.parse(store.get('settings') || 'null'); if (s) applySettings(s); } catch (e) { /* réglages illisibles : valeurs par défaut */ }
+  const NO_RECOMPUTE = ['fileVec', 'fileImg', 'fileGcode', 'extGcode', 'clickAdd', 'calZoom', 'simSpeed', 'simTime', 'imgThr', 'imgMode', 'vecUnit', 'svgScale', 'exSel', 'showImg'];
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    if (NO_RECOMPUTE.includes(el.id) || el.name === 'calNext' || /^[ab]P[xy]$|^[ab][XY]$/.test(el.id)) return;
+    el.addEventListener('input', schedule); el.addEventListener('change', schedule);
+  });
+  $('showImg').addEventListener('change', recompute);
+  const saved = store.get('pts');
+  if (saved && saved.trim()) { $('pts').value = saved; recompute(); } else loadExample('p11');
+  window.MiniSlicer = { version: VERSION, recompute, Sim, S, setImage, traceNow, loadExample, I18N };
+})();
+</script>
+
+</body>
+</html>
