@@ -13,7 +13,7 @@
 - Français / English, thème clair / sombre · French / English, light / dark theme
 
 ## Exemples / Examples
-`exemples/` : croquis et Gcode de la pièce 11, DXF à congés et trou · part 11 sketch and G-code, filleted DXF with a hole.
+`exemples/Exemple-Arrondis-Trou.dxf` : carré à congés R8 et trou Ø20, à importer dans l'onglet DXF / SVG · rounded square (R8 fillets) with a Ø20 hole, to import in the DXF / SVG tab. La page contient aussi un exemple intégré (plaque à congés) · The page also has a built-in example (filleted plate).
 
 ## ⚠️ Sécurité / Safety
 Relisez le Gcode et regardez la simulation avant d'usiner. Outil en version bêta, fourni sans garantie. · Read the G-code and watch the simulation before machining. Beta tool, provided without warranty.

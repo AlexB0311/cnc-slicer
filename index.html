@@ -204,14 +204,9 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
         </div>
 
         <div id="pane-saisie" role="tabpanel" aria-labelledby="tab-saisie" class="stack">
-          <div class="grid2" style="grid-template-columns:minmax(0,1fr) auto;align-items:end">
-            <label for="exSel"><span data-i18n="examples">Exemples</span>
-              <select id="exSel">
-                <option value="p11" data-i18n="exP11">Pièce 11 : créneaux (lignes droites)</option>
-                <option value="plaque" data-i18n="exPlate">Plaque à congés : arcs, trous, lumière</option>
-              </select>
-            </label>
-            <button class="btn" id="btnSample" type="button" data-i18n="load">Charger</button>
+          <div class="row" style="justify-content:space-between">
+            <span class="hint"><span data-i18n="examples">Exemple</span> : <span data-i18n="exPlate">plaque à congés (arcs, trous, lumière)</span></span>
+            <button class="btn" id="btnSample" type="button" data-i18n="load">Charger l’exemple</button>
           </div>
           <label for="pts"><span data-i18n="ptsLabel">Points du contour en mm, un par ligne : X Y</span>
             <textarea id="pts" rows="13" spellcheck="false"></textarea>
@@ -300,7 +295,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
         <h2 id="h-interp"><span class="num">2</span><span data-i18n="hInterp">Lecture du plan</span></h2>
         <div class="choice" role="radiogroup" data-i18n-aria="interpGroup" aria-label="Ce que représente le plan">
           <label><input type="radio" name="interp" value="piece" checked><span><span data-i18n="interpPiece">Contour de la pièce</span><small data-i18n="interpPieceHint">La fraise passe à côté du trait, décalée d'un rayon : vers l'extérieur pour le contour, vers l'intérieur pour un trou.</small></span></label>
-          <label><input type="radio" name="interp" value="path"><span><span data-i18n="interpPath">Trajectoire de la fraise</span><small data-i18n="interpPathHint">Les points sont déjà le centre de la fraise, comme sur le croquis de la pièce 11.</small></span></label>
+          <label><input type="radio" name="interp" value="path"><span><span data-i18n="interpPath">Trajectoire de la fraise</span><small data-i18n="interpPathHint">Les points sont déjà le centre de la fraise : aucun décalage n’est appliqué.</small></span></label>
         </div>
         <label for="snap"><span data-i18n="snap">Pas d'accrochage des clics et de l'image (mm)</span>
           <input type="number" id="snap" value="0.5" step="any" min="0">
@@ -371,7 +366,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
           </label>
           <label for="arcTol"><span data-i18n="arcTol">Tolérance des arcs (mm)</span><input type="number" id="arcTol" value="0.01" step="any" min="0.001"></label>
           <label for="prog"><span data-i18n="prog">N° de programme (%)</span><input type="number" id="prog" value="1" step="1" min="0"></label>
-          <label for="pname"><span data-i18n="pname">Nom (commentaire)</span><input type="text" id="pname" value="piece 11"></label>
+          <label for="pname"><span data-i18n="pname">Nom (commentaire)</span><input type="text" id="pname" value="piece"></label>
         </div>
       </section>
     </div>
@@ -1274,8 +1269,8 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     beta: ['bêta V0.1', 'beta V0.1'],
     helpTitle: ['Mode d’emploi', 'How it works'], themeTitle: ['Thème clair / sombre', 'Light / dark theme'],
     hSrc: ['Plan de la pièce', 'Part drawing'], srcTabs: ['Source du plan', 'Drawing source'], tabInput: ['Saisie', 'Input'], tabImage: ['Image', 'Image'],
-    examples: ['Exemples', 'Examples'], exP11: ['Pièce 11 : créneaux (lignes droites)', 'Part 11: slots (straight lines)'],
-    exPlate: ['Plaque à congés : arcs, trous, lumière', 'Filleted plate: arcs, holes, slot'], load: ['Charger', 'Load'],
+    examples: ['Exemple', 'Example'],
+    exPlate: ['plaque à congés (arcs, trous, lumière)', 'filleted plate (arcs, holes, slot)'], load: ['Charger l’exemple', 'Load example'],
     ptsLabel: ['Points du contour en mm, un par ligne : X Y', 'Contour points in mm, one per line: X Y'],
     ptsHint: ['Ligne vide ou ligne <code>#</code> = nouveau contour ; un contour à l’intérieur d’un autre devient un trou. <code>@dx dy</code> = déplacement relatif. Virgule décimale acceptée. Vous pouvez aussi coller un Gcode existant.',
       'A blank line or a <code>#</code> line starts a new contour; a contour inside another one becomes a hole. <code>@dx dy</code> = relative move. Decimal comma accepted. You can also paste existing G-code.'],
@@ -1295,7 +1290,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     interpPiece: ['Contour de la pièce', 'Part outline'],
     interpPieceHint: ['La fraise passe à côté du trait, décalée d’un rayon : vers l’extérieur pour le contour, vers l’intérieur pour un trou.', 'The cutter runs beside the line, offset by one radius: outwards for the outline, inwards for a hole.'],
     interpPath: ['Trajectoire de la fraise', 'Cutter path'],
-    interpPathHint: ['Les points sont déjà le centre de la fraise, comme sur le croquis de la pièce 11.', 'The points already are the cutter centre, as on the part 11 sketch.'],
+    interpPathHint: ['Les points sont déjà le centre de la fraise : aucun décalage n’est appliqué.', 'The points already are the cutter centre: no offset is applied.'],
     snap: ['Pas d’accrochage des clics et de l’image (mm)', 'Snap step for clicks and image (mm)'],
     hStock: ['Brut et origine', 'Stock and origin'], stW: ['Brut X (mm)', 'Stock X (mm)'], stH: ['Brut Y (mm)', 'Stock Y (mm)'], stT: ['Épaisseur (mm)', 'Thickness (mm)'],
     placeGroup: ['Position de la pièce dans le brut', 'Part position in the stock'], placeCorner: ['Coin bas-gauche de la pièce à', 'Part’s bottom-left corner at'],
@@ -1384,12 +1379,6 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   }
   const ptsText = p => p.map(q => f3(q[0]) + ' ' + f3(q[1])).join('\n');
   const EXAMPLES = {
-    p11: {
-      name: 'piece 11', x0: 10, y0: 10,
-      text: L => (L === 'en' ? '# Part 11: part outline (mm, origin = bottom-left corner of the stock)\n' : '# Pièce 11 : contour de la pièce (mm, origine = coin bas-gauche du brut)\n') +
-        '10 10\n10 37\n14.5 37\n14.5 32\n20.5 32\n20.5 48\n14.5 48\n14.5 43\n10 43\n10 70\n37.5 70\n37.5 75\n32.5 75\n32.5 80\n47.5 80\n47.5 75\n42.5 75\n42.5 70\n70 70\n' +
-        '70 42.5\n75 42.5\n75 47.5\n80 47.5\n80 32.5\n75 32.5\n75 37.5\n70 37.5\n70 10\n40.5 10\n40.5 14.5\n45.5 14.5\n45.5 20.5\n29.5 20.5\n29.5 14.5\n34.5 14.5\n34.5 10\n'
-    },
     plaque: {
       name: 'plaque', x0: 8, y0: 8,
       text: L => {
@@ -1413,8 +1402,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     }
   };
   function loadExample(key) {
-    const ex = EXAMPLES[key] || EXAMPLES.p11;
-    $('exSel').value = key;
+    const ex = EXAMPLES[key] || EXAMPLES.plaque;
     $('pts').value = ex.text(LANG);
     document.querySelector('input[name="interp"][value="piece"]').checked = true;
     document.querySelector('input[name="place"][value="corner"]').checked = true;
@@ -1597,7 +1585,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     for (let i = lines.length - 1; i >= 0; i--) if (lines[i].trim() && !lines[i].trim().startsWith('#')) { lines.splice(i, 1); break; }
     $('pts').value = lines.join('\n') + '\n'; recompute();
   });
-  $('btnSample').addEventListener('click', () => loadExample($('exSel').value));
+  $('btnSample').addEventListener('click', () => loadExample('plaque'));
   $('btnClear').addEventListener('click', () => { $('pts').value = ''; recompute(); $('pts').focus(); });
   $('btnReset').addEventListener('click', () => { applySettings(DEFAULTS); recompute(); });
 
@@ -2082,14 +2070,14 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   })();
   applyTheme();
   try { const s = JSON.parse(store.get('settings') || 'null'); if (s) applySettings(s); } catch (e) { /* réglages illisibles : valeurs par défaut */ }
-  const NO_RECOMPUTE = ['fileVec', 'fileImg', 'fileGcode', 'extGcode', 'clickAdd', 'calZoom', 'simSpeed', 'simTime', 'imgThr', 'imgMode', 'vecUnit', 'svgScale', 'exSel', 'showImg'];
+  const NO_RECOMPUTE = ['fileVec', 'fileImg', 'fileGcode', 'extGcode', 'clickAdd', 'calZoom', 'simSpeed', 'simTime', 'imgThr', 'imgMode', 'vecUnit', 'svgScale', 'showImg'];
   document.querySelectorAll('input, select, textarea').forEach(el => {
     if (NO_RECOMPUTE.includes(el.id) || el.name === 'calNext' || /^[ab]P[xy]$|^[ab][XY]$/.test(el.id)) return;
     el.addEventListener('input', schedule); el.addEventListener('change', schedule);
   });
   $('showImg').addEventListener('change', recompute);
   const saved = store.get('pts');
-  if (saved && saved.trim()) { $('pts').value = saved; recompute(); } else loadExample('p11');
+  if (saved && saved.trim()) { $('pts').value = saved; recompute(); } else loadExample('plaque');
   window.MiniSlicer = { version: VERSION, recompute, Sim, S, setImage, traceNow, loadExample, I18N };
 })();
 </script>
