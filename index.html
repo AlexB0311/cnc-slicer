@@ -241,8 +241,8 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
             </label>
           </div>
           <div class="grid2" id="stlOpts" hidden>
-            <label for="stlUp"><span data-i18n="stlUp">STL : axe vertical de la pièce</span>
-              <select id="stlUp"><option value="z" selected>Z</option><option value="y">Y</option><option value="x">X</option></select>
+            <label for="stlUp"><span data-i18n="stlUp">STL : axe de l’épaisseur</span>
+              <select id="stlUp"><option value="auto" selected data-i18n="stlAuto">Auto (épaisseur = plus petite dimension)</option><option value="z">Z</option><option value="y">Y</option><option value="x">X</option></select>
             </label>
             <label for="stlLevel"><span data-i18n="stlLevel">Hauteur de coupe (% de l’épaisseur)</span>
               <input type="number" id="stlLevel" value="50" step="any" min="0" max="100">
@@ -593,6 +593,31 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
       if (segsCross(p[i], p[(i + 1) % n], p[j], p[(j + 1) % n])) return true;
     }
     return false;
+  }
+  /* Retire les boucles d'une trajectoire décalée qui se croise (passage plus étroit que la fraise) :
+     la fraise ne peut pas y entrer, on garde la boucle principale. Rend { poly, removed }. */
+  function untangle(p, minSize) {
+    minSize = minSize || 0;
+    let poly = p.slice(), removed = 0;
+    const sgn = Math.sign(signedArea(p));
+    for (let guard = 0; guard < 500; guard++) {
+      const n = poly.length;
+      let hit = null;
+      for (let i = 0; i < n && !hit; i++) for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        if (segsCross(poly[i], poly[i + 1], poly[j], poly[(j + 1) % n])) { hit = [i, j]; break; }
+      }
+      if (!hit) break;
+      const [i, j] = hit, X = lineIntersect(poly[i], poly[i + 1], poly[j], poly[(j + 1) % n]) || poly[i + 1];
+      const A = [X].concat(poly.slice(i + 1, j + 1)), B = poly.slice(0, i + 1).concat([X], poly.slice(j + 1));
+      const cand = [A, B].filter(q => q.length >= 3 && Math.sign(signedArea(q)) === sgn);
+      const keep = (cand.length ? cand : [A, B]).sort((u, v) => Math.abs(signedArea(v)) - Math.abs(signedArea(u)))[0];
+      const drop = keep === A ? B : A, db = bbox([drop]);
+      if (Math.hypot(db.x1 - db.x0, db.y1 - db.y0) > minSize) removed++; // les micro-boucles des facettes ne comptent pas
+      poly = clean(keep);
+      if (poly.length < 3) break;
+    }
+    return { poly, removed };
   }
   function interiorPoint(p) {
     // milieu du premier côté, décalé d'un epsilon vers l'intérieur
@@ -1103,7 +1128,11 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
       if (it.isHole && (it.path.length < 3 || signedArea(it.path) * signedArea(it.src) <= 0 || Math.abs(signedArea(it.path)) < 1e-3)) {
         warnings.push({ level: 'error', msg: nm + T(' est trop petit pour une fraise Ø' + fmt(o.toolDiameter) + ' mm : il est ignoré.', ' is too small for a Ø' + fmt(o.toolDiameter) + ' mm cutter: it is skipped.') }); it.skip = true; return;
       }
-      if (selfIntersects(it.path)) warnings.push({ level: 'warn', msg: nm + T(' a un détail plus étroit que la fraise Ø' + fmt(o.toolDiameter) + ' mm : la trajectoire se croise, vérifiez l’aperçu.', ' has a detail narrower than the Ø' + fmt(o.toolDiameter) + ' mm cutter: the path crosses itself, check the drawing.') });
+      if (o.interp !== 'path' && selfIntersects(it.path)) {
+        const u = untangle(it.path, r);
+        it.path = u.poly;
+        if (u.removed) warnings.push({ level: 'warn', msg: nm + T(' : certains creux sont plus étroits que la fraise Ø' + fmt(o.toolDiameter) + ' mm. La fraise y descend autant qu’elle peut, mais un peu de matière reste au fond (par exemple entre les dents). Prenez une fraise plus fine pour les creuser complètement.', ': some recesses are narrower than the Ø' + fmt(o.toolDiameter) + ' mm cutter. The cutter goes as far in as it can, but some material stays at the bottom (for example between teeth). Use a smaller cutter to cut them fully.') });
+      } else if (selfIntersects(it.path)) warnings.push({ level: 'warn', msg: nm + T(' : la trajectoire se croise, vérifiez l’aperçu.', ': the path crosses itself, check the drawing.') });
       if (o.interp === 'path' && !it.isHole && (it.piece.length < 3 || signedArea(it.piece) * signedArea(it.src) <= 0)) warnings.push({ level: 'warn', msg: nm + T(' est plus petit que la fraise : la pièce obtenue sera vide.', ' is smaller than the cutter: the resulting part will be empty.') });
     });
     items = items.filter(it => !it.skip);
@@ -1274,9 +1303,17 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   // Coupe le maillage par un plan horizontal. o : { up: 'z'|'y'|'x', level: fraction de la hauteur (0..1), scale }
   function sliceSTL(stl, o) {
     o = o || {};
-    const up = o.up || 'z', scale = o.scale || 1, n = stl.count, P = stl.tris;
-    // (u, v, hauteur) en repère direct, vu de dessus : Y vertical -> (X, -Z, Y) ; X vertical -> (Y, Z, X)
-    const ax = up === 'x' ? [1, 2, 0] : up === 'y' ? [0, 2, 1] : [0, 1, 2], sg = up === 'y' ? [1, -1, 1] : [1, 1, 1];
+    const scale = o.scale || 1, n = stl.count, P = stl.tris;
+    let up = o.up || 'auto';
+    if (up === 'auto') {
+      // axe d'épaisseur = plus petite dimension du modèle (pièce à plat ou dessinée « debout »)
+      const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < n * 9; i++) { const k = i % 3; if (P[i] < mn[k]) mn[k] = P[i]; if (P[i] > mx[k]) mx[k] = P[i]; }
+      const d = mx.map((x, k) => x - mn[k]);
+      up = d[2] <= d[0] + 1e-9 && d[2] <= d[1] + 1e-9 ? 'z' : d[1] <= d[0] ? 'y' : 'x';
+    }
+    // (u, v, épaisseur) : Z vertical -> vue de dessus (X, Y) ; Y vertical -> vue de face (X, Z) ; X vertical -> vue de côté (Y, Z)
+    const ax = up === 'x' ? [1, 2, 0] : up === 'y' ? [0, 2, 1] : [0, 1, 2], sg = [1, 1, 1];
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     const V = new Float64Array(n * 9);
     for (let i = 0; i < n * 3; i++) for (let k = 0; k < 3; k++) {
@@ -1332,7 +1369,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     // repère du plan : coin bas-gauche du maillage en 0, 0
     contours = contours.map(l => l.map(q => [q[0] - lo[0], q[1] - lo[1]]));
     if (open) warnings.push({ level: 'warn', msg: open + T(' contour(s) ouvert(s) ignoré(s) : le maillage STL n’est pas étanche à cette hauteur.', ' open contour(s) ignored: the STL mesh is not watertight at this height.') });
-    return { contours, warnings, size: [hi[0] - lo[0], hi[1] - lo[1], H], z: z - lo[2], triangles: n };
+    return { contours, warnings, size: [hi[0] - lo[0], hi[1] - lo[1], H], z: z - lo[2], triangles: n, up };
   }
   // retire en une passe les points alignés (fréquents sur une coupe de maillage)
   function dropCollinear(p) {
@@ -1345,7 +1382,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     return out.length >= 3 ? out : p;
   }
 
-  const api = { setLang, fmt, num, dist, signedArea, bbox, clean, offsetPolygon, pointInPoly, selfIntersects, rdpClosed, snapPoly, joinChains, dedupeLoops,
+  const api = { setLang, fmt, num, dist, signedArea, bbox, clean, offsetPolygon, pointInPoly, selfIntersects, untangle, rdpClosed, snapPoly, joinChains, dedupeLoops,
     parseInput, parseGcode, contoursToText, parseDXF, parsePathD, traceImage, calibration, buildJob, generateGcode, originOffset, fitArcs, depthList, perimeter, parseSTL, sliceSTL };
   root.SlicerCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -1357,7 +1394,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   'use strict';
   const C = window.SlicerCore;
   const $ = id => document.getElementById(id);
-  const VERSION = '0.2.0';
+  const VERSION = '0.2.1';
 
   /* ---------- stockage local (peut être indisponible) ---------- */
   const store = {
@@ -1383,7 +1420,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     clickAdd: ['Ajouter des points en cliquant sur le plan', 'Add points by clicking on the drawing'],
     newContour: ['Nouveau contour', 'New contour'], undo: ['Retirer le dernier point', 'Remove last point'], clear: ['Vider', 'Clear'],
     vecLabel: ['Fichier DXF, SVG ou STL', 'DXF, SVG or STL file'],
-    stlUp: ['STL : axe vertical de la pièce', 'STL: vertical axis of the part'], stlLevel: ['Hauteur de coupe (% de l’épaisseur)', 'Cutting height (% of thickness)'],
+    stlUp: ['STL : axe de l’épaisseur', 'STL: thickness axis'], stlAuto: ['Auto (épaisseur = plus petite dimension)', 'Auto (thickness = smallest dimension)'], stlLevel: ['Hauteur de coupe (% de l’épaisseur)', 'Cutting height (% of thickness)'],
     fusionHint: ['Fusion 360 : pour un DXF, clic droit sur l’esquisse → Enregistrer au format DXF ; pour un STL, clic droit sur le corps → Enregistrer comme maillage (unité mm). Le STL est coupé à mi-épaisseur : on obtient le contour et les trous traversants.', 'Fusion 360: for a DXF, right-click the sketch → Save as DXF; for an STL, right-click the body → Save as mesh (unit mm). The STL is cut at mid-thickness: you get the outline and the through holes.'],
     chooseFile: ['Choisir un fichier', 'Choose a file'], chooseImage: ['Choisir une image', 'Choose an image'], dropHint: ['ou glissez-le ici', 'or drop it here'],
     dxfUnits: ['Unités DXF / STL', 'DXF / STL units'], fromFile: ['Lues dans le fichier (STL : mm)', 'Read from file (STL: mm)'], inches: ['pouces', 'inches'], svgScale: ['SVG : mm par unité', 'SVG: mm per unit'],
@@ -1769,7 +1806,10 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     if (!res.contours.length) { setInfo('vecInfo', () => tr('Aucun contour fermé trouvé dans ', 'No closed contour found in ') + S.vecName + '. ' + res.warnings.map(w => w.msg).join(' ')); return; }
     $('pts').value = tr('# Importé de ', '# Imported from ') + S.vecName + '\n' + C.contoursToText(res.contours) + '\n';
     setInfo('vecInfo', () => res.describe ? res.describe() + res.warnings.map(w => w.msg).join(' ') : res.contours.length + tr(' contour(s) fermé(s) lu(s) dans ', ' closed contour(s) read from ') + S.vecName + (res.units ? tr(' (unités : ', ' (units: ') + res.units + ')' : '') + '. ' + res.warnings.map(w => w.msg).join(' '));
-    document.querySelector('input[name="place"][value="corner"]').checked = true;
+    // coin bas-gauche à X0 Y0 si la pièce y tient (fraise comprise), sinon centrée dans le brut
+    const bbI = C.bbox(res.contours), dI = pos('toolD', 2);
+    const fits = fin('x0', 0) + (bbI.x1 - bbI.x0) + dI <= pos('stW', 80) && fin('y0', 0) + (bbI.y1 - bbI.y0) + dI <= pos('stH', 80);
+    document.querySelector('input[name="place"][value="' + (fits ? 'corner' : 'center') + '"]').checked = true;
     recompute();
   }
   function importSTL(buf) {
@@ -1779,9 +1819,9 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     const sz = r.size.map(x => C.fmt(Math.round(x * 100) / 100));
     const T = pos('stT', 3);
     if (r.size[2] > 0 && Math.abs(r.size[2] - T) > 0.05) r.warnings.push({ level: 'info', msg: tr('Épaisseur du modèle ' + sz[2] + ' mm, brut ' + C.fmt(T) + ' mm : vérifiez la profondeur de coupe.', 'Model thickness ' + sz[2] + ' mm, stock ' + C.fmt(T) + ' mm: check the cutting depth.') });
-    if (r.size[2] > Math.max(r.size[0], r.size[1])) r.warnings.push({ level: 'warn', msg: tr('Le modèle est plus haut que large : changez peut-être l’axe vertical.', 'The model is taller than it is wide: maybe change the vertical axis.') });
+    if (r.size[2] > Math.max(r.size[0], r.size[1])) r.warnings.push({ level: 'warn', msg: tr('L’épaisseur choisie est la plus grande dimension du modèle : essayez l’axe « Auto ».', 'The chosen thickness is the largest dimension of the model: try the “Auto” axis.') });
     const zc = C.fmt(Math.round(r.z * 100) / 100), fmtEn = mesh.format === 'binaire' ? 'binary' : 'ASCII';
-    r.describe = () => r.contours.length + tr(' contour(s) fermé(s) dans ', ' closed contour(s) in ') + S.vecName + tr(' (maillage ' + mesh.format + ', ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, coupé à ' + zc + ' mm du bas). ', ' (' + fmtEn + ' mesh, ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, cut ' + zc + ' mm above the bottom). ');
+    r.describe = () => r.contours.length + tr(' contour(s) fermé(s) dans ', ' closed contour(s) in ') + S.vecName + tr(' (maillage ' + mesh.format + ', ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, coupé à ' + zc + ' mm du bas, épaisseur selon ' + r.up.toUpperCase() + '). ', ' (' + fmtEn + ' mesh, ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, cut ' + zc + ' mm above the bottom, thickness along ' + r.up.toUpperCase() + '). ');
     return r;
   }
   function importSVG(text) {
