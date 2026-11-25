@@ -177,7 +177,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     <div class="brand">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="17" width="28" height="11" rx="2" fill="var(--wood)" stroke="var(--wood-dark)"/><path d="M8 17v5h16v-5" fill="none" stroke="var(--cut)" stroke-width="2.2"/><rect x="13" y="2" width="6" height="9" rx="1.5" fill="var(--muted)"/><rect x="15" y="11" width="2" height="9" fill="var(--accent)"/></svg>
       <h1>CNC Slicer</h1>
-      <span class="beta" data-i18n="beta">bêta V0.1</span>
+      <span class="beta" data-i18n="beta">bêta V0.2</span>
     </div>
     <div class="tools">
       <a class="iconbtn" href="#help" id="helpLink" data-i18n-title="helpTitle" data-i18n-aria="helpTitle" title="Mode d'emploi" aria-label="Mode d'emploi"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.3-2.5 3.9"/><path d="M12 17.2h.01"/></svg></a>
@@ -199,7 +199,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
         <h2 id="h-src"><span class="num">1</span><span data-i18n="hSrc">Plan de la pièce</span></h2>
         <div class="tabs" role="tablist" data-i18n-aria="srcTabs" aria-label="Source du plan">
           <button role="tab" id="tab-saisie" aria-selected="true" aria-controls="pane-saisie" data-i18n="tabInput">Saisie</button>
-          <button role="tab" id="tab-fichier" aria-selected="false" aria-controls="pane-fichier">DXF / SVG</button>
+          <button role="tab" id="tab-fichier" aria-selected="false" aria-controls="pane-fichier">DXF / SVG / STL</button>
           <button role="tab" id="tab-image" aria-selected="false" aria-controls="pane-image" data-i18n="tabImage">Image</button>
         </div>
 
@@ -221,16 +221,16 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
         </div>
 
         <div id="pane-fichier" role="tabpanel" aria-labelledby="tab-fichier" class="stack" hidden>
-          <span class="sublabel" data-i18n="vecLabel">Fichier DXF (Fusion 360 : clic droit sur l'esquisse → Enregistrer au format DXF) ou SVG</span>
+          <span class="sublabel" data-i18n="vecLabel">Fichier DXF, SVG ou STL</span>
           <label class="drop" for="fileVec">
             <span class="btn" data-i18n="chooseFile">Choisir un fichier</span>
             <span class="fname" id="fileVecName" data-i18n="dropHint">ou glissez-le ici</span>
-            <input type="file" id="fileVec" accept=".dxf,.svg,image/svg+xml">
+            <input type="file" id="fileVec" accept=".dxf,.svg,.stl,image/svg+xml,model/stl">
           </label>
           <div class="grid2">
-            <label for="vecUnit"><span data-i18n="dxfUnits">Unités DXF</span>
+            <label for="vecUnit"><span data-i18n="dxfUnits">Unités DXF / STL</span>
               <select id="vecUnit">
-                <option value="0" data-i18n="fromFile">Lues dans le fichier</option>
+                <option value="0" data-i18n="fromFile">Lues dans le fichier (STL : mm)</option>
                 <option value="1">mm</option>
                 <option value="10">cm</option>
                 <option value="25.4" data-i18n="inches">pouces</option>
@@ -240,6 +240,15 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
               <input type="number" id="svgScale" step="any" min="0" placeholder="auto">
             </label>
           </div>
+          <div class="grid2" id="stlOpts" hidden>
+            <label for="stlUp"><span data-i18n="stlUp">STL : axe vertical de la pièce</span>
+              <select id="stlUp"><option value="z" selected>Z</option><option value="y">Y</option><option value="x">X</option></select>
+            </label>
+            <label for="stlLevel"><span data-i18n="stlLevel">Hauteur de coupe (% de l’épaisseur)</span>
+              <input type="number" id="stlLevel" value="50" step="any" min="0" max="100">
+            </label>
+          </div>
+          <p class="hint" data-i18n="fusionHint">Fusion 360 : pour un DXF, clic droit sur l’esquisse → Enregistrer au format DXF ; pour un STL, clic droit sur le corps → Enregistrer comme maillage (unité mm). Le STL est coupé à mi-épaisseur : on obtient le contour et les trous traversants.</p>
           <p class="hint" id="vecInfo"></p>
         </div>
 
@@ -469,7 +478,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   </section>
 
   <footer class="foot">
-    <span>© 2026 Alexandre BARAKAT · CREAO TECH · CNC Slicer <span data-i18n="beta">bêta V0.1</span></span>
+    <span>© 2026 Alexandre BARAKAT · CREAO TECH · CNC Slicer <span data-i18n="beta">bêta V0.2</span></span>
     <span data-i18n="privacy">Tout est calculé dans votre navigateur : aucun fichier n'est envoyé.</span>
   </footer>
 </div>
@@ -1239,8 +1248,105 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     return L.join('\n') + '\n';
   }
 
+  /* ---------- STL : lecture (binaire ou ASCII) et coupe horizontale ---------- */
+  // Rend { tris: Float32Array (9 nombres par triangle), count } ; accepte un ArrayBuffer, un Uint8Array ou un texte.
+  function parseSTL(data) {
+    let bytes = null, text = null;
+    if (typeof data === 'string') text = data;
+    else bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    if (bytes && bytes.length >= 84) {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      const n = dv.getUint32(80, true);
+      if (84 + n * 50 === bytes.length) {
+        const tris = new Float32Array(n * 9);
+        for (let i = 0; i < n; i++) for (let k = 0; k < 9; k++) tris[i * 9 + k] = dv.getFloat32(84 + i * 50 + 12 + k * 4, true);
+        return { tris, count: n, format: 'binaire' };
+      }
+    }
+    if (text === null) { text = ''; for (let i = 0; i < bytes.length; i += 65536) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 65536)); }
+    if (!/^\s*solid/i.test(text) || !/vertex/i.test(text)) throw new Error(T('fichier STL illisible (ni binaire, ni ASCII)', 'unreadable STL file (neither binary nor ASCII)'));
+    const re = /vertex\s+([-+\d.eE]+)\s+([-+\d.eE]+)\s+([-+\d.eE]+)/g, v = [];
+    let m;
+    while ((m = re.exec(text))) v.push(+m[1], +m[2], +m[3]);
+    const count = Math.floor(v.length / 9);
+    return { tris: new Float32Array(v.slice(0, count * 9)), count, format: 'ASCII' };
+  }
+  // Coupe le maillage par un plan horizontal. o : { up: 'z'|'y'|'x', level: fraction de la hauteur (0..1), scale }
+  function sliceSTL(stl, o) {
+    o = o || {};
+    const up = o.up || 'z', scale = o.scale || 1, n = stl.count, P = stl.tris;
+    // (u, v, hauteur) en repère direct, vu de dessus : Y vertical -> (X, -Z, Y) ; X vertical -> (Y, Z, X)
+    const ax = up === 'x' ? [1, 2, 0] : up === 'y' ? [0, 2, 1] : [0, 1, 2], sg = up === 'y' ? [1, -1, 1] : [1, 1, 1];
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    const V = new Float64Array(n * 9);
+    for (let i = 0; i < n * 3; i++) for (let k = 0; k < 3; k++) {
+      const c = P[i * 3 + ax[k]] * scale * sg[k];
+      V[i * 3 + k] = c; if (c < lo[k]) lo[k] = c; if (c > hi[k]) hi[k] = c;
+    }
+    const warnings = [];
+    if (!n || !isFinite(lo[2])) return { contours: [], warnings: [{ level: 'error', msg: T('Fichier STL vide.', 'Empty STL file.') }], size: [0, 0, 0] };
+    const H = hi[2] - lo[2];
+    let z = lo[2] + H * Math.min(1, Math.max(0, o.level === undefined ? 0.5 : o.level));
+    // éviter un plan qui passe exactement par des sommets
+    const eps = Math.max(1e-6, H * 1e-7);
+    for (let guard = 0; guard < 20; guard++) {
+      let hit = false;
+      for (let i = 2; i < V.length; i += 3) if (Math.abs(V[i] - z) < eps) { hit = true; break; }
+      if (!hit) break;
+      z += eps * 7.3;
+    }
+    if (H > 0 && (z <= lo[2] || z >= hi[2])) z = lo[2] + H / 2;
+    // segments de coupe, chaînés par extrémités (clé arrondie)
+    const key = (x, y) => Math.round(x * 1e4) + ':' + Math.round(y * 1e4);
+    const segs = [], ends = new Map();
+    for (let t = 0; t < n; t++) {
+      const pts = [];
+      for (let e = 0; e < 3; e++) {
+        const a = t * 9 + e * 3, b = t * 9 + ((e + 1) % 3) * 3;
+        const za = V[a + 2] - z, zb = V[b + 2] - z;
+        if ((za < 0) === (zb < 0)) continue;
+        const f = za / (za - zb);
+        pts.push([V[a] + (V[b] - V[a]) * f, V[a + 1] + (V[b + 1] - V[a + 1]) * f]);
+      }
+      if (pts.length !== 2 || dist(pts[0], pts[1]) < 1e-9) continue;
+      const s = { a: pts[0], b: pts[1], ka: key(pts[0][0], pts[0][1]), kb: key(pts[1][0], pts[1][1]), used: false };
+      segs.push(s);
+      [s.ka, s.kb].forEach(k => { if (!ends.has(k)) ends.set(k, []); ends.get(k).push(s); });
+    }
+    const loops = []; let open = 0;
+    for (const s0 of segs) {
+      if (s0.used) continue;
+      s0.used = true;
+      const loop = [s0.a]; let cur = s0.kb, last = s0.b;
+      for (let guard = 0; guard <= segs.length; guard++) {
+        if (cur === s0.ka) break;
+        loop.push(last);
+        const nx = (ends.get(cur) || []).find(s => !s.used);
+        if (!nx) { open++; loop.length = 0; break; }
+        nx.used = true;
+        if (nx.ka === cur) { cur = nx.kb; last = nx.b; } else { cur = nx.ka; last = nx.a; }
+      }
+      if (loop.length >= 3) loops.push(dropCollinear(loop));
+    }
+    let contours = dedupeLoops(loops.map(l => clean(l, 1e-5))).filter(l => l.length >= 3 && Math.abs(signedArea(l)) > 1e-4);
+    // repère du plan : coin bas-gauche du maillage en 0, 0
+    contours = contours.map(l => l.map(q => [q[0] - lo[0], q[1] - lo[1]]));
+    if (open) warnings.push({ level: 'warn', msg: open + T(' contour(s) ouvert(s) ignoré(s) : le maillage STL n’est pas étanche à cette hauteur.', ' open contour(s) ignored: the STL mesh is not watertight at this height.') });
+    return { contours, warnings, size: [hi[0] - lo[0], hi[1] - lo[1], H], z: z - lo[2], triangles: n };
+  }
+  // retire en une passe les points alignés (fréquents sur une coupe de maillage)
+  function dropCollinear(p) {
+    const out = [];
+    for (let i = 0; i < p.length; i++) {
+      const a = out.length ? out[out.length - 1] : p[p.length - 1], b = p[i], c = p[(i + 1) % p.length];
+      const cr = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+      if (Math.abs(cr) > 2e-5 * Math.max(1e-9, dist(a, c))) out.push(b); // écart de b à la droite ac > 0,02 µm
+    }
+    return out.length >= 3 ? out : p;
+  }
+
   const api = { setLang, fmt, num, dist, signedArea, bbox, clean, offsetPolygon, pointInPoly, selfIntersects, rdpClosed, snapPoly, joinChains, dedupeLoops,
-    parseInput, parseGcode, contoursToText, parseDXF, parsePathD, traceImage, calibration, buildJob, generateGcode, originOffset, fitArcs, depthList, perimeter };
+    parseInput, parseGcode, contoursToText, parseDXF, parsePathD, traceImage, calibration, buildJob, generateGcode, originOffset, fitArcs, depthList, perimeter, parseSTL, sliceSTL };
   root.SlicerCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1251,7 +1357,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   'use strict';
   const C = window.SlicerCore;
   const $ = id => document.getElementById(id);
-  const VERSION = '0.1.0';
+  const VERSION = '0.2.0';
 
   /* ---------- stockage local (peut être indisponible) ---------- */
   const store = {
@@ -1266,7 +1372,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   const tr = (fr, en) => (LANG === 'en' ? en : fr);
   // textes fixes : clé -> [français, anglais]
   const I18N = {
-    beta: ['bêta V0.1', 'beta V0.1'],
+    beta: ['bêta V0.2', 'beta V0.2'],
     helpTitle: ['Mode d’emploi', 'How it works'], themeTitle: ['Thème clair / sombre', 'Light / dark theme'],
     hSrc: ['Plan de la pièce', 'Part drawing'], srcTabs: ['Source du plan', 'Drawing source'], tabInput: ['Saisie', 'Input'], tabImage: ['Image', 'Image'],
     examples: ['Exemple', 'Example'],
@@ -1276,9 +1382,11 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
       'A blank line or a <code>#</code> line starts a new contour; a contour inside another one becomes a hole. <code>@dx dy</code> = relative move. Decimal comma accepted. You can also paste existing G-code.'],
     clickAdd: ['Ajouter des points en cliquant sur le plan', 'Add points by clicking on the drawing'],
     newContour: ['Nouveau contour', 'New contour'], undo: ['Retirer le dernier point', 'Remove last point'], clear: ['Vider', 'Clear'],
-    vecLabel: ['Fichier DXF (Fusion 360 : clic droit sur l’esquisse → Enregistrer au format DXF) ou SVG', 'DXF file (Fusion 360: right-click the sketch → Save as DXF) or SVG'],
+    vecLabel: ['Fichier DXF, SVG ou STL', 'DXF, SVG or STL file'],
+    stlUp: ['STL : axe vertical de la pièce', 'STL: vertical axis of the part'], stlLevel: ['Hauteur de coupe (% de l’épaisseur)', 'Cutting height (% of thickness)'],
+    fusionHint: ['Fusion 360 : pour un DXF, clic droit sur l’esquisse → Enregistrer au format DXF ; pour un STL, clic droit sur le corps → Enregistrer comme maillage (unité mm). Le STL est coupé à mi-épaisseur : on obtient le contour et les trous traversants.', 'Fusion 360: for a DXF, right-click the sketch → Save as DXF; for an STL, right-click the body → Save as mesh (unit mm). The STL is cut at mid-thickness: you get the outline and the through holes.'],
     chooseFile: ['Choisir un fichier', 'Choose a file'], chooseImage: ['Choisir une image', 'Choose an image'], dropHint: ['ou glissez-le ici', 'or drop it here'],
-    dxfUnits: ['Unités DXF', 'DXF units'], fromFile: ['Lues dans le fichier', 'Read from file'], inches: ['pouces', 'inches'], svgScale: ['SVG : mm par unité', 'SVG: mm per unit'],
+    dxfUnits: ['Unités DXF / STL', 'DXF / STL units'], fromFile: ['Lues dans le fichier (STL : mm)', 'Read from file (STL: mm)'], inches: ['pouces', 'inches'], svgScale: ['SVG : mm par unité', 'SVG: mm per unit'],
     vecInfo: ['Seuls les contours fermés sont gardés. Les points importés arrivent dans l’onglet Saisie, où vous pouvez les corriger.', 'Only closed contours are kept. Imported points land in the Input tab, where you can correct them.'],
     imgLabel: ['Image du plan (photo, capture, croquis coté)', 'Drawing image (photo, screenshot, dimensioned sketch)'],
     calHint: ['Calage : cliquez sur deux points dont vous connaissez la position en mm (par exemple deux croisements de la grille), puis indiquez leurs coordonnées.', 'Calibration: click two points whose position in mm you know (for example two grid crossings), then enter their coordinates.'],
@@ -1323,7 +1431,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     keyG1: ['Coupe en ligne droite', 'Straight cut'], keyArc: ['Coupe en arc : G2 horaire, G3 anti-horaire', 'Arc cut: G2 clockwise, G3 counter-clockwise'],
     keyCur: ['Ligne en cours dans la simulation (cliquez une ligne pour y aller)', 'Current line in the simulation (click a line to jump to it)'],
     help1t: ['Décrire la pièce', 'Describe the part'],
-    help1: ['Saisissez les points, importez un DXF ou SVG (Fusion 360 : clic droit sur l’esquisse, Enregistrer au format DXF), ou calez une photo du plan sur deux points connus.', 'Type the points, import a DXF or SVG (Fusion 360: right-click the sketch, Save as DXF), or calibrate a photo of the drawing on two known points.'],
+    help1: ['Saisissez les points, importez un DXF, SVG ou STL de Fusion 360, ou calez une photo du plan sur deux points connus.', 'Type the points, import a DXF, SVG or STL from Fusion 360, or calibrate a photo of the drawing on two known points.'],
     help2t: ['Dire ce que représente le plan', 'Say what the drawing represents'],
     help2: ['Le contour de la pièce (la fraise est décalée d’un rayon) ou directement la trajectoire du centre de la fraise.', 'The part outline (the cutter is offset by one radius) or directly the path of the cutter centre.'],
     help3t: ['Régler le brut et la coupe', 'Set the stock and the cut'],
@@ -1643,22 +1751,38 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   $('fileVec').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const rd = new FileReader();
-    rd.onload = () => { S.vecText = rd.result; S.vecName = f.name; importVec(); };
-    rd.readAsText(f);
+    const isStl = /\.stl$/i.test(f.name);
+    rd.onload = () => { S.vecText = rd.result; S.vecName = f.name; S.vecStl = isStl; importVec(); };
+    if (isStl) rd.readAsArrayBuffer(f); else rd.readAsText(f);
   });
   $('vecUnit').addEventListener('change', () => S.vecText && importVec());
   $('svgScale').addEventListener('change', () => S.vecText && importVec());
+  ['stlUp', 'stlLevel'].forEach(id => $(id).addEventListener('change', () => S.vecText && S.vecStl && importVec()));
   function importVec() {
     let res;
     try {
-      if (/\.svg$/i.test(S.vecName) || /^\s*<(\?xml|svg)/i.test(S.vecText)) res = importSVG(S.vecText);
+      $('stlOpts').hidden = !S.vecStl;
+      if (S.vecStl) res = importSTL(S.vecText);
+      else if (/\.svg$/i.test(S.vecName) || /^\s*<(\?xml|svg)/i.test(S.vecText)) res = importSVG(S.vecText);
       else res = C.parseDXF(S.vecText, parseFloat($('vecUnit').value) || 0);
     } catch (err) { setInfo('vecInfo', () => tr('Lecture impossible : ', 'Cannot read file: ') + err.message); return; }
     if (!res.contours.length) { setInfo('vecInfo', () => tr('Aucun contour fermé trouvé dans ', 'No closed contour found in ') + S.vecName + '. ' + res.warnings.map(w => w.msg).join(' ')); return; }
     $('pts').value = tr('# Importé de ', '# Imported from ') + S.vecName + '\n' + C.contoursToText(res.contours) + '\n';
-    setInfo('vecInfo', () => res.contours.length + tr(' contour(s) fermé(s) lu(s) dans ', ' closed contour(s) read from ') + S.vecName + (res.units ? tr(' (unités : ', ' (units: ') + res.units + ')' : '') + '. ' + res.warnings.map(w => w.msg).join(' '));
+    setInfo('vecInfo', () => res.describe ? res.describe() + res.warnings.map(w => w.msg).join(' ') : res.contours.length + tr(' contour(s) fermé(s) lu(s) dans ', ' closed contour(s) read from ') + S.vecName + (res.units ? tr(' (unités : ', ' (units: ') + res.units + ')' : '') + '. ' + res.warnings.map(w => w.msg).join(' '));
     document.querySelector('input[name="place"][value="corner"]').checked = true;
     recompute();
+  }
+  function importSTL(buf) {
+    const mesh = C.parseSTL(buf);
+    const level = Math.min(100, Math.max(0, isFinite(v('stlLevel')) ? v('stlLevel') : 50)) / 100;
+    const r = C.sliceSTL(mesh, { up: $('stlUp').value, level, scale: parseFloat($('vecUnit').value) || 1 });
+    const sz = r.size.map(x => C.fmt(Math.round(x * 100) / 100));
+    const T = pos('stT', 3);
+    if (r.size[2] > 0 && Math.abs(r.size[2] - T) > 0.05) r.warnings.push({ level: 'info', msg: tr('Épaisseur du modèle ' + sz[2] + ' mm, brut ' + C.fmt(T) + ' mm : vérifiez la profondeur de coupe.', 'Model thickness ' + sz[2] + ' mm, stock ' + C.fmt(T) + ' mm: check the cutting depth.') });
+    if (r.size[2] > Math.max(r.size[0], r.size[1])) r.warnings.push({ level: 'warn', msg: tr('Le modèle est plus haut que large : changez peut-être l’axe vertical.', 'The model is taller than it is wide: maybe change the vertical axis.') });
+    const zc = C.fmt(Math.round(r.z * 100) / 100), fmtEn = mesh.format === 'binaire' ? 'binary' : 'ASCII';
+    r.describe = () => r.contours.length + tr(' contour(s) fermé(s) dans ', ' closed contour(s) in ') + S.vecName + tr(' (maillage ' + mesh.format + ', ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, coupé à ' + zc + ' mm du bas). ', ' (' + fmtEn + ' mesh, ' + r.triangles + ' triangles, ' + sz.join(' × ') + ' mm, cut ' + zc + ' mm above the bottom). ');
+    return r;
   }
   function importSVG(text) {
     const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
@@ -2070,7 +2194,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   })();
   applyTheme();
   try { const s = JSON.parse(store.get('settings') || 'null'); if (s) applySettings(s); } catch (e) { /* réglages illisibles : valeurs par défaut */ }
-  const NO_RECOMPUTE = ['fileVec', 'fileImg', 'fileGcode', 'extGcode', 'clickAdd', 'calZoom', 'simSpeed', 'simTime', 'imgThr', 'imgMode', 'vecUnit', 'svgScale', 'showImg'];
+  const NO_RECOMPUTE = ['fileVec', 'fileImg', 'fileGcode', 'extGcode', 'clickAdd', 'calZoom', 'simSpeed', 'simTime', 'imgThr', 'imgMode', 'vecUnit', 'svgScale', 'stlUp', 'stlLevel', 'showImg'];
   document.querySelectorAll('input, select, textarea').forEach(el => {
     if (NO_RECOMPUTE.includes(el.id) || el.name === 'calNext' || /^[ab]P[xy]$|^[ab][XY]$/.test(el.id)) return;
     el.addEventListener('input', schedule); el.addEventListener('change', schedule);
