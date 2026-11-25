@@ -325,6 +325,15 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
           <label><input type="radio" name="place" value="center"><span data-i18n="placeCenter">Centrée dans le brut</span></label>
           <label><input type="radio" name="place" value="keep"><span data-i18n="placeKeep">Garder les coordonnées du plan</span></label>
         </div>
+        <div class="stack" style="gap:6px">
+          <span class="sublabel" data-i18n="orientTitle">Orientation de la pièce</span>
+          <div class="row">
+            <button class="btn" id="rotL" type="button" data-i18n-title="rotLTitle" data-i18n-aria="rotLTitle" title="Tourner de 90° vers la gauche" aria-label="Tourner de 90° vers la gauche">↺ 90°</button>
+            <button class="btn" id="rotR" type="button" data-i18n-title="rotRTitle" data-i18n-aria="rotRTitle" title="Tourner de 90° vers la droite" aria-label="Tourner de 90° vers la droite">↻ 90°</button>
+            <label for="rot" class="row" style="gap:6px"><span data-i18n="rotAngle">Angle (°)</span><input type="number" id="rot" value="0" step="any" style="width:80px"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="mirror"><span data-i18n="mirror">Retourner la pièce (miroir : l’autre face sur le dessus)</span></label>
+        </div>
         <div class="grid2">
           <label for="orgXY"><span data-i18n="orgXY">Origine programme X0 Y0</span>
             <select id="orgXY">
@@ -1394,7 +1403,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   'use strict';
   const C = window.SlicerCore;
   const $ = id => document.getElementById(id);
-  const VERSION = '0.2.1';
+  const VERSION = '0.2.2';
 
   /* ---------- stockage local (peut être indisponible) ---------- */
   const store = {
@@ -1440,7 +1449,9 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     hStock: ['Brut et origine', 'Stock and origin'], stW: ['Brut X (mm)', 'Stock X (mm)'], stH: ['Brut Y (mm)', 'Stock Y (mm)'], stT: ['Épaisseur (mm)', 'Thickness (mm)'],
     placeGroup: ['Position de la pièce dans le brut', 'Part position in the stock'], placeCorner: ['Coin bas-gauche de la pièce à', 'Part’s bottom-left corner at'],
     placeCornerEnd: ['mm du coin bas-gauche du brut', 'mm from the stock’s bottom-left corner'], placeCenter: ['Centrée dans le brut', 'Centred in the stock'],
-    placeKeep: ['Garder les coordonnées du plan', 'Keep the drawing coordinates'], orgXY: ['Origine programme X0 Y0', 'Program origin X0 Y0'],
+    placeKeep: ['Garder les coordonnées du plan', 'Keep the drawing coordinates'],
+    orientTitle: ['Orientation de la pièce', 'Part orientation'], rotLTitle: ['Tourner de 90° vers la gauche', 'Rotate 90° to the left'], rotRTitle: ['Tourner de 90° vers la droite', 'Rotate 90° to the right'], rotAngle: ['Angle (°)', 'Angle (°)'],
+    mirror: ['Retourner la pièce (miroir : l’autre face sur le dessus)', 'Flip the part (mirror: the other face on top)'], orgXY: ['Origine programme X0 Y0', 'Program origin X0 Y0'],
     oSBL: ['Coin bas-gauche du brut', 'Stock bottom-left corner'], oSBR: ['Coin bas-droit du brut', 'Stock bottom-right corner'], oSTL: ['Coin haut-gauche du brut', 'Stock top-left corner'],
     oSTR: ['Coin haut-droit du brut', 'Stock top-right corner'], oSC: ['Centre du brut', 'Stock centre'], oPBL: ['Coin bas-gauche de la pièce', 'Part bottom-left corner'], oPC: ['Centre de la pièce', 'Part centre'],
     orgZ: ['Origine Z0', 'Z0 origin'], zTop: ['Dessus du brut', 'Top of stock'], zBottom: ['Dessous du brut (table)', 'Bottom of stock (table)'],
@@ -1553,6 +1564,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     document.querySelector('input[name="place"][value="corner"]').checked = true;
     $('x0').value = ex.x0; $('y0').value = ex.y0; $('pname').value = ex.name;
     $('showImg').checked = false; // l'image calée ne correspond plus à l'exemple
+    resetOrient();
     recompute();
   }
 
@@ -1571,17 +1583,18 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   /* ---------- réglages : lecture, contrôle, mémorisation ---------- */
   const v = id => parseFloat(String($(id).value).replace(',', '.'));
   const radio = n => document.querySelector('input[name="' + n + '"]:checked').value;
-  const SETTINGS = ['snap', 'stW', 'stH', 'stT', 'x0', 'y0', 'orgXY', 'orgZ', 'toolD', 'depth', 'step', 'spindle', 'feed', 'toolNo', 'safeZ', 'retZ', 'dir', 'arcs', 'arcTol', 'prog', 'pname'];
+  const SETTINGS = ['rot', 'snap', 'stW', 'stH', 'stT', 'x0', 'y0', 'orgXY', 'orgZ', 'toolD', 'depth', 'step', 'spindle', 'feed', 'toolNo', 'safeZ', 'retZ', 'dir', 'arcs', 'arcTol', 'prog', 'pname'];
   const RADIOS = ['interp', 'place'];
   const DEFAULTS = {};
   SETTINGS.forEach(id => { DEFAULTS[id] = $(id).value; });
   RADIOS.forEach(n => { DEFAULTS['@' + n] = radio(n); });
   function saveSettings() {
-    const o = {}; SETTINGS.forEach(id => { o[id] = $(id).value; }); RADIOS.forEach(n => { o['@' + n] = radio(n); });
+    const o = {}; SETTINGS.forEach(id => { o[id] = $(id).value; }); RADIOS.forEach(n => { o['@' + n] = radio(n); }); o.mirror = $('mirror').checked;
     store.set('settings', JSON.stringify(o));
   }
   function applySettings(o) {
     SETTINGS.forEach(id => { if (o[id] !== undefined) $(id).value = o[id]; });
+    $('mirror').checked = !!o.mirror;
     RADIOS.forEach(n => { const r = o['@' + n] && document.querySelector('input[name="' + n + '"][value="' + o['@' + n] + '"]'); if (r) r.checked = true; });
   }
   // champs numériques : [id, minimum, strict]
@@ -1615,6 +1628,21 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     };
   }
 
+  /* ---------- orientation : miroir puis rotation autour du centre de la pièce ---------- */
+  function orient(contours) {
+    const a = fin('rot', 0), m = $('mirror').checked;
+    if (!contours.length || (!m && Math.abs(a % 360) < 1e-9)) return contours;
+    const b = C.bbox(contours), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    const c = Math.cos(a * Math.PI / 180), sn = Math.sin(a * Math.PI / 180), r9 = x => Math.round(x * 1e9) / 1e9;
+    return contours.map(p => {
+      const q = p.map(([x, y]) => { const dx = m ? cx - x : x - cx, dy = y - cy; return [r9(cx + dx * c - dy * sn), r9(cy + dx * sn + dy * c)]; });
+      return m ? q.reverse() : q;
+    });
+  }
+  function resetOrient() { $('rot').value = 0; $('mirror').checked = false; }
+  $('rotL').addEventListener('click', () => { $('rot').value = C.fmt(((fin('rot', 0) + 90) % 360 + 360) % 360); recompute(); });
+  $('rotR').addEventListener('click', () => { $('rot').value = C.fmt(((fin('rot', 0) - 90) % 360 + 360) % 360); recompute(); });
+
   /* ---------- calcul ---------- */
   let timer = null;
   function schedule() { clearTimeout(timer); timer = setTimeout(recompute, 120); }
@@ -1623,7 +1651,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     const o = opts();
     store.set('pts', $('pts').value); saveSettings();
     const parsed = C.parseInput($('pts').value);
-    const job = C.buildJob(parsed.contours, o);
+    const job = C.buildJob(orient(parsed.contours), o);
     job.warnings = checks.concat(parsed.warnings, job.warnings);
     S.job = job; S.opts = o;
     renderStats(job); renderMsgs(job.warnings); renderPlan(job, o);
@@ -1804,6 +1832,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
       else res = C.parseDXF(S.vecText, parseFloat($('vecUnit').value) || 0);
     } catch (err) { setInfo('vecInfo', () => tr('Lecture impossible : ', 'Cannot read file: ') + err.message); return; }
     if (!res.contours.length) { setInfo('vecInfo', () => tr('Aucun contour fermé trouvé dans ', 'No closed contour found in ') + S.vecName + '. ' + res.warnings.map(w => w.msg).join(' ')); return; }
+    resetOrient();
     $('pts').value = tr('# Importé de ', '# Imported from ') + S.vecName + '\n' + C.contoursToText(res.contours) + '\n';
     setInfo('vecInfo', () => res.describe ? res.describe() + res.warnings.map(w => w.msg).join(' ') : res.contours.length + tr(' contour(s) fermé(s) lu(s) dans ', ' closed contour(s) read from ') + S.vecName + (res.units ? tr(' (unités : ', ' (units: ') + res.units + ')' : '') + '. ' + res.warnings.map(w => w.msg).join(' '));
     // coin bas-gauche à X0 Y0 si la pièce y tient (fraise comprise), sinon centrée dans le brut
