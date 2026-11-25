@@ -326,11 +326,15 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
           <label><input type="radio" name="place" value="keep"><span data-i18n="placeKeep">Garder les coordonnées du plan</span></label>
         </div>
         <div class="stack" style="gap:6px">
-          <span class="sublabel" data-i18n="orientTitle">Orientation de la pièce</span>
+          <span class="sublabel" data-i18n="orientTitle">Orientation et taille de la pièce</span>
           <div class="row">
             <button class="btn" id="rotL" type="button" data-i18n-title="rotLTitle" data-i18n-aria="rotLTitle" title="Tourner de 90° vers la gauche" aria-label="Tourner de 90° vers la gauche">↺ 90°</button>
             <button class="btn" id="rotR" type="button" data-i18n-title="rotRTitle" data-i18n-aria="rotRTitle" title="Tourner de 90° vers la droite" aria-label="Tourner de 90° vers la droite">↻ 90°</button>
             <label for="rot" class="row" style="gap:6px"><span data-i18n="rotAngle">Angle (°)</span><input type="number" id="rot" value="0" step="any" style="width:80px"></label>
+          </div>
+          <div class="row">
+            <label for="scale" class="row" style="gap:6px"><span data-i18n="scaleLbl">Échelle (%)</span><input type="number" id="scale" value="100" step="any" min="0" style="width:80px"></label>
+            <small class="sublabel" id="sizeInfo" aria-live="polite"></small>
           </div>
           <label class="check"><input type="checkbox" id="mirror"><span data-i18n="mirror">Retourner la pièce (miroir : l’autre face sur le dessus)</span></label>
         </div>
@@ -1403,7 +1407,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   'use strict';
   const C = window.SlicerCore;
   const $ = id => document.getElementById(id);
-  const VERSION = '0.2.2';
+  const VERSION = '0.2.3';
 
   /* ---------- stockage local (peut être indisponible) ---------- */
   const store = {
@@ -1450,7 +1454,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     placeGroup: ['Position de la pièce dans le brut', 'Part position in the stock'], placeCorner: ['Coin bas-gauche de la pièce à', 'Part’s bottom-left corner at'],
     placeCornerEnd: ['mm du coin bas-gauche du brut', 'mm from the stock’s bottom-left corner'], placeCenter: ['Centrée dans le brut', 'Centred in the stock'],
     placeKeep: ['Garder les coordonnées du plan', 'Keep the drawing coordinates'],
-    orientTitle: ['Orientation de la pièce', 'Part orientation'], rotLTitle: ['Tourner de 90° vers la gauche', 'Rotate 90° to the left'], rotRTitle: ['Tourner de 90° vers la droite', 'Rotate 90° to the right'], rotAngle: ['Angle (°)', 'Angle (°)'],
+    orientTitle: ['Orientation et taille de la pièce', 'Part orientation and size'], scaleLbl: ['Échelle (%)', 'Scale (%)'], rotLTitle: ['Tourner de 90° vers la gauche', 'Rotate 90° to the left'], rotRTitle: ['Tourner de 90° vers la droite', 'Rotate 90° to the right'], rotAngle: ['Angle (°)', 'Angle (°)'],
     mirror: ['Retourner la pièce (miroir : l’autre face sur le dessus)', 'Flip the part (mirror: the other face on top)'], orgXY: ['Origine programme X0 Y0', 'Program origin X0 Y0'],
     oSBL: ['Coin bas-gauche du brut', 'Stock bottom-left corner'], oSBR: ['Coin bas-droit du brut', 'Stock bottom-right corner'], oSTL: ['Coin haut-gauche du brut', 'Stock top-left corner'],
     oSTR: ['Coin haut-droit du brut', 'Stock top-right corner'], oSC: ['Centre du brut', 'Stock centre'], oPBL: ['Coin bas-gauche de la pièce', 'Part bottom-left corner'], oPC: ['Centre de la pièce', 'Part centre'],
@@ -1583,7 +1587,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
   /* ---------- réglages : lecture, contrôle, mémorisation ---------- */
   const v = id => parseFloat(String($(id).value).replace(',', '.'));
   const radio = n => document.querySelector('input[name="' + n + '"]:checked').value;
-  const SETTINGS = ['rot', 'snap', 'stW', 'stH', 'stT', 'x0', 'y0', 'orgXY', 'orgZ', 'toolD', 'depth', 'step', 'spindle', 'feed', 'toolNo', 'safeZ', 'retZ', 'dir', 'arcs', 'arcTol', 'prog', 'pname'];
+  const SETTINGS = ['rot', 'scale', 'snap', 'stW', 'stH', 'stT', 'x0', 'y0', 'orgXY', 'orgZ', 'toolD', 'depth', 'step', 'spindle', 'feed', 'toolNo', 'safeZ', 'retZ', 'dir', 'arcs', 'arcTol', 'prog', 'pname'];
   const RADIOS = ['interp', 'place'];
   const DEFAULTS = {};
   SETTINGS.forEach(id => { DEFAULTS[id] = $(id).value; });
@@ -1598,7 +1602,7 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     RADIOS.forEach(n => { const r = o['@' + n] && document.querySelector('input[name="' + n + '"][value="' + o['@' + n] + '"]'); if (r) r.checked = true; });
   }
   // champs numériques : [id, minimum, strict]
-  const CHECKS = [['stW', 0, true], ['stH', 0, true], ['stT', 0, true], ['toolD', 0, true], ['depth', 0, true], ['step', 0, true], ['feed', 0, true], ['spindle', 0, false], ['arcTol', 0, true], ['snap', 0, false]];
+  const CHECKS = [['scale', 0, true], ['stW', 0, true], ['stH', 0, true], ['stT', 0, true], ['toolD', 0, true], ['depth', 0, true], ['step', 0, true], ['feed', 0, true], ['spindle', 0, false], ['arcTol', 0, true], ['snap', 0, false]];
   function validate() {
     const bad = [];
     CHECKS.forEach(([id, min, strict]) => {
@@ -1628,18 +1632,18 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     };
   }
 
-  /* ---------- orientation : miroir puis rotation autour du centre de la pièce ---------- */
+  /* ---------- orientation et taille : échelle, miroir puis rotation autour du centre de la pièce ---------- */
   function orient(contours) {
-    const a = fin('rot', 0), m = $('mirror').checked;
-    if (!contours.length || (!m && Math.abs(a % 360) < 1e-9)) return contours;
+    const a = fin('rot', 0), m = $('mirror').checked, k = pos('scale', 100) / 100;
+    if (!contours.length || (!m && Math.abs(a % 360) < 1e-9 && Math.abs(k - 1) < 1e-12)) return contours;
     const b = C.bbox(contours), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-    const c = Math.cos(a * Math.PI / 180), sn = Math.sin(a * Math.PI / 180), r9 = x => Math.round(x * 1e9) / 1e9;
+    const c = Math.cos(a * Math.PI / 180) * k, sn = Math.sin(a * Math.PI / 180) * k, r9 = x => Math.round(x * 1e9) / 1e9;
     return contours.map(p => {
       const q = p.map(([x, y]) => { const dx = m ? cx - x : x - cx, dy = y - cy; return [r9(cx + dx * c - dy * sn), r9(cy + dx * sn + dy * c)]; });
       return m ? q.reverse() : q;
     });
   }
-  function resetOrient() { $('rot').value = 0; $('mirror').checked = false; }
+  function resetOrient() { $('rot').value = 0; $('scale').value = 100; $('mirror').checked = false; }
   $('rotL').addEventListener('click', () => { $('rot').value = C.fmt(((fin('rot', 0) + 90) % 360 + 360) % 360); recompute(); });
   $('rotR').addEventListener('click', () => { $('rot').value = C.fmt(((fin('rot', 0) - 90) % 360 + 360) % 360); recompute(); });
 
@@ -1651,7 +1655,10 @@ footer.foot { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: sp
     const o = opts();
     store.set('pts', $('pts').value); saveSettings();
     const parsed = C.parseInput($('pts').value);
-    const job = C.buildJob(orient(parsed.contours), o);
+    const shaped = orient(parsed.contours);
+    const job = C.buildJob(shaped, o);
+    if (shaped.length) { const bS = C.bbox(shaped), r2 = x => C.fmt(Math.round(x * 100) / 100); setInfo('sizeInfo', () => tr('Taille de la pièce : ', 'Part size: ') + r2(bS.x1 - bS.x0) + ' × ' + r2(bS.y1 - bS.y0) + ' mm'); }
+    else setInfo('sizeInfo', () => '');
     job.warnings = checks.concat(parsed.warnings, job.warnings);
     S.job = job; S.opts = o;
     renderStats(job); renderMsgs(job.warnings); renderPlan(job, o);
